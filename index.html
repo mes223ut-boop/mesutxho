@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101018" />
+    <meta name="description" content="Mesutxho'nun sosyal profilleri. Google ile güvenli giriş." />
+    <title>mesutxho — Socials</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <video class="background-video" autoplay muted loop playsinline preload="auto" aria-hidden="true">
+      <source src="video.mp4" type="video/mp4" />
+    </video>
+    <div class="background-shade" aria-hidden="true"></div>
+
+    <div class="audio-control" aria-label="Music controls">
+      <button id="audio-toggle" class="audio-toggle" type="button" aria-label="Play music" title="Play music">
+        <svg class="audio-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path class="audio-play-mark" d="M8 5.5v13l10-6.5-10-6.5Z" fill="currentColor" />
+          <path class="audio-pause-mark" d="M7 5h4v14H7zM15 5h4v14h-4z" fill="currentColor" />
+        </svg>
+      </button>
+      <label class="volume-control" for="volume-slider">
+        <span class="volume-label">Volume</span>
+        <input id="volume-slider" type="range" min="0" max="1" step="0.01" value="0.45" aria-label="Music volume" />
+      </label>
+    </div>
+
+    <main class="page">
+      <section id="login-screen" class="glass-card login-card" aria-labelledby="login-title">
+        <div class="identity">
+          <div class="avatar" aria-hidden="true">M</div>
+          <div>
+            <p class="eyebrow">personal space</p>
+            <h1>mesutxho</h1>
+          </div>
+        </div>
+
+        <h2 id="login-title">Welcome back</h2>
+        <p class="intro">Continue with your account</p>
+
+        <div class="privacy-notice">
+          <p>
+            Google ile girişte adın, e-posta adresin, profil fotoğrafın ve UID'n;
+            giriş zamanı, tarayıcı bilgisi ve cihaz türü Firebase'de kaydedilir.
+            Tarayıcın destekliyorsa pil seviyesi ve ağ bağlantısı türü de oturum
+            kaydına eklenir. IP adresi veya şehir/konum bilgisi bu uygulama kaydında
+            toplanmaz. Kayıtları yalnızca yetkili yönetici görebilir; Firebase
+            projesine erişimi olan proje yöneticileri altyapı üzerinden de
+            erişebilir. Kayıtlar 90 gün sonra silinmek üzere ayarlanır.
+          </p>
+          <label class="consent-label">
+            <input id="privacy-consent" type="checkbox" />
+            <span>Bilgilendirmeyi okudum ve kayıt işlemine onay veriyorum.</span>
+          </label>
+        </div>
+
+        <div class="login-actions">
+          <button id="google-login" class="login-button google-button" type="button" disabled>
+            <svg class="login-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.52h3.24c1.9-1.75 2.98-4.33 2.98-7.37Z" />
+              <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.4l-3.24-2.52c-.9.6-2.04.96-3.38.96-2.6 0-4.8-1.76-5.59-4.13H3.06v2.6A10 10 0 0 0 12 22Z" />
+              <path fill="#FBBC05" d="M6.41 13.91a6.02 6.02 0 0 1 0-3.82v-2.6H3.06a10 10 0 0 0 0 9.02l3.35-2.6Z" />
+              <path fill="#EA4335" d="M12 5.96c1.47 0 2.79.51 3.83 1.52l2.87-2.87C16.96 2.98 14.7 2 12 2a10 10 0 0 0-8.94 5.49l3.35 2.6C7.2 7.72 9.4 5.96 12 5.96Z" />
+            </svg>
+            <span>Continue with Google</span>
+          </button>
+        </div>
+        <p class="login-note" id="login-note" aria-live="polite"></p>
+      </section>
+
+      <section id="social-screen" class="glass-card social-card hidden" aria-labelledby="social-title">
+        <header class="social-heading">
+          <div class="avatar avatar-small" aria-hidden="true">M</div>
+          <div>
+            <p class="eyebrow">find me on</p>
+            <h2 id="social-title">@mesutxho</h2>
+          </div>
+          <div class="social-actions">
+            <a id="admin-link" class="admin-link hidden" href="admin.html">Admin</a>
+            <button id="logout-button" class="back-button" type="button" aria-label="Sign out" title="Sign out">↗</button>
+          </div>
+        </header>
+
+        <nav class="social-links" aria-label="Social media links">
+          <a class="social-link instagram" href="https://www.instagram.com/mesutxho/" target="_blank" rel="noopener noreferrer" aria-label="Open Instagram">
+            <span class="app-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.6" cy="6.7" r="1.2" fill="currentColor"/></svg>
+            </span>
+            <span>Instagram</span>
+            <span class="external-arrow" aria-hidden="true">↗</span>
+          </a>
+          <a class="social-link spotify" href="https://open.spotify.com/user/31mkbn2tfsl7nqgsyjyioyskmnli?si=b16fba6922594fbc" target="_blank" rel="noopener noreferrer" aria-label="Open Spotify">
+            <span class="app-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="#1ED760" />
+                <path d="M5.4 9.2c4.3-1.3 9.8-.8 13.2 1.2M6.3 12.2c3.6-1.1 8-.6 11.2 1.3M7.1 15.1c2.8-.8 6.1-.4 8.7 1.1" fill="none" stroke="#101812" stroke-linecap="round" stroke-width="1.7" />
+              </svg>
+            </span>
+            <span>Spotify</span>
+            <span class="external-arrow" aria-hidden="true">↗</span>
+          </a>
+          <a class="social-link tiktok" href="https://www.tiktok.com/@mesutxho" target="_blank" rel="noopener noreferrer" aria-label="Open TikTok">
+            <span class="app-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path fill="currentColor" d="M14.2 3h3.1c.2 2 1.3 3.3 3.2 4.1v3.2a9 9 0 0 1-3.2-1.2v6.1a5.5 5.5 0 1 1-5.5-5.5c.4 0 .8 0 1.1.1v3.3a2.5 2.5 0 1 0 1.3 2.2V3Z"/></svg>
+            </span>
+            <span>TikTok</span>
+            <span class="external-arrow" aria-hidden="true">↗</span>
+          </a>
+        </nav>
+        <p id="social-status" class="social-footnote" role="status"></p>
+        <p class="social-footnote">Tap an icon to open the profile</p>
+      </section>
+    </main>
+
+    <audio id="background-audio" src="muzik.mp3" preload="auto" loop></audio>
+    <script type="module" src="script.js?v=20261013-3"></script>
+  </body>
+</html>

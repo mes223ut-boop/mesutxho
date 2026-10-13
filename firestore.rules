@@ -1,0 +1,100 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isGoogleUser() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function isAdminReader() {
+      return isGoogleUser()
+        && request.auth.token.email == 'mes223ut@gmail.com';
+    }
+
+    function hasValidSessionData() {
+      let data = request.resource.data;
+      let minimumExpiry = request.time.toMillis() + 89 * 24 * 60 * 60 * 1000;
+      let maximumExpiry = request.time.toMillis() + 91 * 24 * 60 * 60 * 1000;
+
+      return data.keys().hasAll([
+          'uid',
+          'email',
+          'displayName',
+          'photoURL',
+          'batteryPercent',
+          'networkType',
+          'deviceType',
+          'userAgent',
+          'consentAccepted',
+          'privacyNoticeVersion',
+          'createdAt',
+          'expiresAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'email',
+          'displayName',
+          'photoURL',
+          'batteryPercent',
+          'networkType',
+          'deviceType',
+          'userAgent',
+          'consentAccepted',
+          'privacyNoticeVersion',
+          'createdAt',
+          'expiresAt'
+        ])
+        && data.uid == request.auth.uid
+        && data.email == request.auth.token.email
+        && data.displayName is string
+        && data.displayName.size() <= 200
+        && data.photoURL is string
+        && data.photoURL.size() <= 2048
+        && (data.photoURL == ''
+          || data.photoURL.matches('https://[^/]+\\.googleusercontent\\.com/.*'))
+        && (data.batteryPercent == null
+          || (data.batteryPercent is int
+            && data.batteryPercent >= 0
+            && data.batteryPercent <= 100))
+        && (data.networkType == null
+          || data.networkType in [
+            'Wi-Fi',
+            '4G',
+            '3G',
+            '2G',
+            'Mobil ağ',
+            'Ethernet',
+            '4G (tahmini)',
+            '3G (tahmini)',
+            '2G (tahmini)'
+          ])
+        && data.deviceType in ['Mobile', 'Desktop', 'Tablet']
+        && data.userAgent is string
+        && data.userAgent.size() <= 1000
+        && data.consentAccepted == true
+        && data.privacyNoticeVersion == '2026-10-13-v3'
+        && data.createdAt == request.time
+        && data.expiresAt is timestamp
+        && data.expiresAt.toMillis() >= minimumExpiry
+        && data.expiresAt.toMillis() <= maximumExpiry;
+    }
+
+    match /sessions/{sessionId} {
+      allow get, list: if isAdminReader();
+      allow create: if isGoogleUser() && hasValidSessionData();
+      allow update, delete: if false;
+    }
+
+    match /loginSessions/{sessionId} {
+      allow get, list: if isAdminReader();
+      allow create, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080b12" />
+    <title>Yönetim Paneli — mesutxho</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body class="admin-body">
+    <video class="background-video" autoplay muted loop playsinline preload="auto" aria-hidden="true">
+      <source src="video.mp4" type="video/mp4" />
+    </video>
+    <div class="background-shade" aria-hidden="true"></div>
+
+    <main class="admin-page">
+      <div class="admin-layout">
+        <aside class="admin-sidebar" aria-label="Yönetim paneli menüsü">
+          <a class="sidebar-brand" href="#overview-section" aria-label="MESUTXHO yönetim paneli">
+            <span class="admin-brand-mark" aria-hidden="true">M</span>
+            <span>MESUTXHO<span class="sidebar-brand-caption">CONTROL PANEL</span></span>
+          </a>
+
+          <div class="sidebar-profile">
+            <span id="sidebar-avatar" class="sidebar-avatar" aria-hidden="true">M</span>
+            <span class="sidebar-profile-details">
+              <strong id="sidebar-profile-name">Yönetici</strong>
+              <span id="sidebar-profile-email">Yönetici hesabı</span>
+            </span>
+          </div>
+
+          <p class="sidebar-section-label">MENÜ</p>
+          <nav class="sidebar-nav">
+            <a class="sidebar-link active" href="#overview-section" aria-current="page">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"></rect></svg>
+              <span>Genel Bakış</span>
+            </a>
+            <a class="sidebar-link" href="#records-section">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5h12M8 12h12M8 18.5h12"></path><path d="M3.5 5.5h.01M3.5 12h.01M3.5 18.5h.01"></path></svg>
+              <span>Oturum Kayıtları</span>
+            </a>
+          </nav>
+
+          <div class="sidebar-bottom">
+            <a class="sidebar-link sidebar-site-link" href="index.html">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"></path><path d="M20 4 11 13"></path><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"></path></svg>
+              <span>Siteye Dön</span>
+            </a>
+            <span class="sidebar-version">MESUTXHO · ADMIN</span>
+          </div>
+        </aside>
+
+        <section class="admin-shell">
+        <header class="admin-header">
+          <div class="admin-brand">
+            <span class="admin-brand-mark" aria-hidden="true">M</span>
+            <span>MESUTXHO <span class="admin-brand-divider">/</span> ADMIN</span>
+          </div>
+        </header>
+
+        <section id="overview-section" class="admin-intro" aria-labelledby="admin-title">
+          <div>
+            <p class="eyebrow"><span class="status-indicator"></span> GÜVENLİ OTURUM MERKEZİ</p>
+            <h1 id="admin-title">Genel Bakış</h1>
+            <p class="admin-subtitle">Giriş etkinliğini ve oturum detaylarını buradan takip et.</p>
+          </div>
+        </section>
+
+        <p id="admin-status" class="admin-status" role="status" aria-live="polite">Yetki kontrol ediliyor...</p>
+        <div id="admin-login-consent" class="privacy-notice hidden">
+          <p>
+            Google ile girişte adın, e-posta adresin, profil fotoğrafın ve UID'n;
+            giriş zamanı, tarayıcı bilgisi ve cihaz türüyle birlikte kaydedilir.
+            Tarayıcın destekliyorsa pil seviyesi ve ağ bağlantısı türü de kaydedilir.
+            Bu uygulama kaydında IP veya şehir/konum bilgisi toplanmaz. Kayıtları
+            yalnızca yetkili yönetici görebilir; Firebase proje yöneticileri
+            altyapıdan erişebilir. 90 gün sonra silinmek üzere ayarlanır.
+          </p>
+          <label class="consent-label">
+            <input id="admin-privacy-consent" type="checkbox" />
+            <span>Bilgilendirmeyi okudum ve kayıt işlemine onay veriyorum.</span>
+          </label>
+        </div>
+
+        <div id="admin-content" class="admin-content hidden">
+          <section class="metric-grid" aria-label="Oturum istatistikleri">
+            <article class="metric-card metric-total">
+              <div class="metric-topline">
+                <span class="metric-label">Toplam giriş</span>
+                <span class="metric-icon" aria-hidden="true">↗</span>
+              </div>
+              <strong id="metric-total" class="metric-value">—</strong>
+              <span class="metric-caption">Saklanan tüm oturum kayıtları</span>
+            </article>
+
+            <article class="metric-card metric-active">
+              <div class="metric-topline">
+                <span class="metric-label">Aktif kullanıcı</span>
+                <span class="metric-icon" aria-hidden="true"><span class="status-indicator"></span></span>
+              </div>
+              <strong id="metric-active" class="metric-value">—</strong>
+              <span class="metric-caption">Son 30 günde giriş yapan farklı hesap</span>
+            </article>
+
+            <article class="metric-card metric-devices">
+              <div class="metric-topline">
+                <span class="metric-label">Cihaz dağılımı</span>
+                <span class="metric-period">SON 30 GÜN</span>
+              </div>
+              <div class="device-breakdown">
+                <span><i class="device-dot mobile"></i>Mobil <strong id="device-mobile">0</strong></span>
+                <span><i class="device-dot desktop"></i>Masaüstü <strong id="device-desktop">0</strong></span>
+                <span><i class="device-dot tablet"></i>Tablet <strong id="device-tablet">0</strong></span>
+              </div>
+              <span class="metric-caption">Oturum sayısına göre</span>
+            </article>
+          </section>
+
+          <section id="records-section" class="records-card" aria-labelledby="records-title">
+            <div class="records-heading">
+              <div>
+                <h2 id="records-title">Son oturumlar</h2>
+                <p class="retention-note">En yeni 100 kayıt · Saklama süresi 90 gün</p>
+              </div>
+              <label class="search-box">
+                <span class="search-icon" aria-hidden="true"></span>
+                <input id="session-search" type="search" placeholder="Kayıtlarda ara..." autocomplete="off" aria-label="Oturum kayıtlarında ara" />
+                <kbd>/</kbd>
+              </label>
+            </div>
+
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Kullanıcı</th>
+                    <th>UID</th>
+                    <th>Giriş zamanı</th>
+                    <th>Cihaz</th>
+                    <th>Tarayıcı / User-Agent</th>
+                  </tr>
+                </thead>
+                <tbody id="session-rows"></tbody>
+              </table>
+            </div>
+            <p id="search-result-count" class="search-result-count"></p>
+          </section>
+        </div>
+
+        <button id="admin-google-login" class="login-button google-button admin-login hidden" type="button" disabled>
+          Google hesabımla yönetici olarak giriş yap
+        </button>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="admin.js?v=20261013-3"></script>
+  </body>
+</html>
