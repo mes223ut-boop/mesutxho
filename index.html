@@ -62,7 +62,8 @@
             işletim sistemi ve sürümü, tarayıcı ve sürümü, ekran boyutu, dil, yönlendiren
             sayfanın adresi (sorgu parametreleri olmadan), giriş yöntemi, oturum süresi
             ve giriş yaptıysan UID/e-posta/ad/profil fotoğrafı Firebase'de 90 güne kadar
-            saklanır. IP konumu ipapi.co üzerinden sorgulanır; bu yaklaşık konumdur.
+            saklanır. IP ve yaklaşık konum bilgisi ipapi.co, ipwho.is veya diğer yedek
+            sağlayıcılara iletilebilir.
             GeoIP servisi yanıt vermezse site çalışmaya devam eder ve konum alanları boş
             kalır. Güvenlik amacıyla erişim denetimi IP adresini her ziyarette işler;
             kayıt onayı vermeden misafir erişimi mümkündür ve oturum kaydı oluşturulmaz.
@@ -142,8 +143,9 @@
             Onay verirsen bu ziyaretin IP/konum/ISP bilgisi, cihaz modeli ve türü,
             işletim sistemi/sürümü, tarayıcı/sürümü, ekran boyutu, dil, yönlendiren
             sayfa, oturum süresi, giriş yöntemi ve varsa UID/e-posta/ad/profil fotoğrafı
-            90 güne kadar Firebase'de saklanır. IP konumu yaklaşık olarak ipapi.co'dan
-            alınır. Servis yanıt vermezse site çalışmaya devam eder ve konum boş kalır.
+            90 güne kadar Firebase'de saklanır. IP ve yaklaşık konum bilgisi, ipapi.co
+            ve ipwho.is gibi sağlayıcılardan alınabilir. Servisler yanıt vermezse site
+            çalışmaya devam eder ve konum bilinmiyor olarak kalır.
             Güvenlik erişim denetimi IP'yi her ziyarette işler; onayı kaldırmak yeni
             oturum kayıtlarını durdurur. Kayıtları yetkili yönetici ve Firebase proje
             yöneticileri görebilir.
@@ -159,6 +161,6 @@
     </main>
 
     <audio id="background-audio" src="muzik.mp3" preload="auto" loop></audio>
-    <script type="module" src="script.js?v=20261014-5"></script>
+    <script type="module" src="script.js?v=20261014-6"></script>
   </body>
 </html>

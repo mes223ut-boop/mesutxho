@@ -3,8 +3,8 @@ import {
   firebaseAuth,
   firebaseDatabase,
   firebaseFunctions
-} from './firebase-config.js?v=20261014-5';
-import { recordUserSession } from './session-records.js?v=20261014-5';
+} from './firebase-config.js?v=20261014-6';
+import { recordUserSession } from './session-records.js?v=20261014-6';
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -101,7 +101,7 @@ function formatTimestamp(value) {
   const date = getDate(value);
   return date
     ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'medium' }).format(date)
-    : '—';
+    : 'Bilinmiyor';
 }
 
 function formatUser(record) {
@@ -113,7 +113,7 @@ function getAuthMethod(record) {
 }
 
 function formatDuration(value) {
-  if (!Number.isFinite(value) || value < 0) return '—';
+  if (!Number.isFinite(value) || value < 0) return 'Bilinmiyor';
   const minutes = Math.floor(value / 60);
   const seconds = value % 60;
   return minutes ? `${minutes} dk ${seconds} sn` : `${seconds} sn`;
@@ -122,7 +122,7 @@ function formatDuration(value) {
 function addCell(row, value, className = '') {
   const cell = document.createElement('td');
   if (className) cell.className = className;
-  cell.textContent = value === null || value === undefined || value === '' ? '—' : String(value);
+  cell.textContent = value === null || value === undefined || value === '' ? 'Bilinmiyor' : String(value);
   row.appendChild(cell);
   return cell;
 }
@@ -130,7 +130,7 @@ function addCell(row, value, className = '') {
 function addLinkCell(row, value, label = value) {
   const cell = document.createElement('td');
   if (typeof value !== 'string' || !value) {
-    cell.textContent = '—';
+    cell.textContent = 'Bilinmiyor';
     row.appendChild(cell);
     return cell;
   }
@@ -167,6 +167,47 @@ function createActionButton(label, callback, className = 'action-button') {
   return button;
 }
 
+function getIp(record) {
+  if (typeof record.ip !== 'string') return 'Yerel/Gizli IP';
+  const ip = record.ip.trim();
+  const ipv4Parts = ip.split('.');
+  const isIpv4 = ipv4Parts.length === 4 && ipv4Parts.every((part) => (
+    /^\d{1,3}$/.test(part) && Number(part) <= 255
+  ));
+  if (isIpv4) return ip;
+  if (ip.includes(':')) {
+    try {
+      if (new URL(`http://[${ip}]/`).hostname) return ip;
+    } catch {
+      return 'Yerel/Gizli IP';
+    }
+  }
+  return 'Yerel/Gizli IP';
+}
+
+function getLocation(record) {
+  const location = [record.city, record.region, record.country].filter(Boolean).join(', ');
+  return location || 'Bilinmiyor';
+}
+
+function getDevice(record) {
+  const deviceType = record.deviceType || 'Bilinmiyor';
+  const platform = [record.operatingSystem, record.operatingSystemVersion].filter(Boolean).join(' ');
+  return [deviceType, record.deviceModel, platform].filter(Boolean).join(' · ');
+}
+
+function renderActiveUsers() {
+  const activeCutoff = Date.now() - 5 * 60 * 1000;
+  const activeVisitors = new Set();
+  for (const record of sessions) {
+    const lastSeen = getDate(record.lastSeen);
+    if (lastSeen && lastSeen.getTime() > activeCutoff) {
+      activeVisitors.add(record.uid || record.id);
+    }
+  }
+  activeMetric.textContent = activeVisitors.size.toLocaleString('tr-TR');
+}
+
 function renderRecentSessions() {
   const recent = sessions.slice(0, 20);
   if (!recent.length) {
@@ -178,7 +219,7 @@ function renderRecentSessions() {
   for (const record of recent) {
     const row = document.createElement('tr');
     addCell(row, formatUser(record));
-    addCell(row, [record.ip, record.city, record.country].filter(Boolean).join(' · '));
+    addCell(row, [getIp(record), getLocation(record)].join(' · '));
     addCell(row, getAuthMethod(record));
     addCell(row, formatTimestamp(record.createdAt));
     addCell(row, `${record.deviceType || 'Bilinmiyor'} · ${record.browser || 'Bilinmiyor'} ${record.browserVersion || ''}`.trim());
@@ -222,20 +263,18 @@ function renderProviderBreakdown() {
 }
 
 function renderOverview() {
-  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const activeVisitors = new Set();
+  const deviceCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const devices = { Mobile: 0, Desktop: 0, Tablet: 0 };
   for (const record of sessions) {
-    const date = sessionDate(record);
-    if (date && date.getTime() >= cutoff) {
-      activeVisitors.add(record.uid || record.ip || record.id);
+    const visitDate = sessionDate(record);
+    if (visitDate && visitDate.getTime() >= deviceCutoff) {
       if (Object.hasOwn(devices, record.deviceType)) {
         devices[record.deviceType] += 1;
       }
     }
   }
   totalMetric.textContent = sessions.length.toLocaleString('tr-TR');
-  activeMetric.textContent = activeVisitors.size.toLocaleString('tr-TR');
+  renderActiveUsers();
   for (const [device, element] of Object.entries(overviewDeviceMetrics)) {
     element.textContent = devices[device].toLocaleString('tr-TR');
   }
@@ -264,28 +303,28 @@ function renderIpRows() {
   const fragment = document.createDocumentFragment();
   for (const record of filtered) {
     const row = document.createElement('tr');
-    addCell(row, record.ip);
-    addCell(
-      row,
-      [record.city, record.region, record.country].filter(Boolean).join(', ')
-        || (record.geoStatus === 'unavailable' ? 'GeoIP alınamadı' : 'Konum bilgisi yok')
-    );
+    addCell(row, getIp(record));
+    const location = getLocation(record);
+    addCell(row, location === 'Bilinmiyor' && record.geoStatus === 'unavailable'
+      ? 'GeoIP alınamadı'
+      : location);
     addCell(row, record.postalCode);
     addCell(row, Number.isFinite(record.latitude) && Number.isFinite(record.longitude)
       ? `${record.latitude}, ${record.longitude}`
       : '');
     addCell(row, record.timezone || record.clientTimezone);
-    addCell(row, record.isp);
+    addCell(row, record.isp || 'Bilinmiyor');
     addCell(row, formatUser(record));
     addCell(row, formatTimestamp(record.createdAt));
     const actionCell = document.createElement('td');
-    const ipIsBanned = bannedIps.has(record.ip);
+    const ip = getIp(record);
+    const ipIsBanned = bannedIps.has(ip);
     const button = createActionButton(
       ipIsBanned ? 'IP banını kaldır' : 'IP banla',
-      () => void changeIpBan(record.ip, !ipIsBanned),
+      () => void changeIpBan(ip, !ipIsBanned),
       ipIsBanned ? 'action-button unban-button' : 'action-button danger-button'
     );
-    button.disabled = !record.ip || busyActions.has(`ip:${record.ip}`);
+    button.disabled = ip === 'Yerel/Gizli IP' || busyActions.has(`ip:${ip}`);
     actionCell.appendChild(button);
     row.appendChild(actionCell);
     fragment.appendChild(row);
@@ -304,7 +343,7 @@ function renderBannedIps() {
   const fragment = document.createDocumentFragment();
   for (const record of records) {
     const row = document.createElement('tr');
-    addCell(row, record.ip);
+    addCell(row, getIp(record));
     addCell(row, formatTimestamp(record.createdAt));
     const cell = document.createElement('td');
     cell.appendChild(createActionButton(
@@ -372,10 +411,13 @@ function renderUserRows() {
     record.email,
     record.uid,
     getAuthMethod(record),
-    record.ip
+    getIp(record),
+    getLocation(record),
+    record.isp,
+    getDevice(record)
   ].some((value) => typeof value === 'string' && value.toLocaleLowerCase('tr-TR').includes(term)));
   if (!filtered.length) {
-    showEmpty(recordRows.users, term ? 'Aramanla eşleşen kayıt bulunamadı.' : 'Henüz kullanıcı/oturum kaydı bulunmuyor.', 9);
+    showEmpty(recordRows.users, term ? 'Aramanla eşleşen kayıt bulunamadı.' : 'Henüz kullanıcı/oturum kaydı bulunmuyor.', 12);
     return;
   }
 
@@ -386,7 +428,10 @@ function renderUserRows() {
     addLinkCell(row, record.photoURL, record.photoURL ? 'Profil fotoğrafı' : '');
     addCell(row, getAuthMethod(record));
     addCell(row, record.uid);
-    addCell(row, record.ip);
+    addCell(row, getIp(record));
+    addCell(row, getLocation(record));
+    addCell(row, record.isp || 'Bilinmiyor');
+    addCell(row, getDevice(record));
     addCell(row, [record.referrer, record.pagePath].filter(Boolean).join(' → '));
     addCell(row, formatDuration(record.durationSeconds));
     addCell(row, formatTimestamp(record.createdAt));
@@ -403,11 +448,12 @@ function renderUserRows() {
       banButton.disabled = record.uid === currentUser?.uid || busyActions.has(`user:${record.uid}`);
       actionGroup.appendChild(banButton);
     }
-    if (record.ip) {
-      const ipIsBanned = bannedIps.has(record.ip);
+    const ip = getIp(record);
+    if (ip !== 'Yerel/Gizli IP') {
+      const ipIsBanned = bannedIps.has(ip);
       actionGroup.appendChild(createActionButton(
         ipIsBanned ? 'IP banını kaldır' : 'IP banla',
-        () => void changeIpBan(record.ip, !ipIsBanned),
+        () => void changeIpBan(ip, !ipIsBanned),
         ipIsBanned ? 'action-button unban-button' : 'action-button danger-button'
       ));
     }
@@ -716,6 +762,8 @@ navigationLinks.forEach((link) => {
     link.setAttribute('aria-current', 'page');
   });
 });
+
+window.setInterval(renderActiveUsers, 15000);
 
 ipSearch.addEventListener('input', renderIpRows);
 userSearch.addEventListener('input', renderUserRows);

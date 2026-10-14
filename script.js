@@ -3,11 +3,11 @@ import {
   firebaseAuth,
   firebaseDatabase,
   firebaseFunctions
-} from './firebase-config.js?v=20261014-5';
+} from './firebase-config.js?v=20261014-6';
 import {
   recordUserSession,
   updateSessionDuration
-} from './session-records.js?v=20261014-5';
+} from './session-records.js?v=20261014-6';
 import {
   GoogleAuthProvider,
   OAuthProvider,
@@ -46,10 +46,10 @@ const backgroundAudio = document.getElementById('background-audio');
 const audioControl = document.querySelector('.audio-control');
 const audioToggle = document.getElementById('audio-toggle');
 const volumeSlider = document.getElementById('volume-slider');
-const checkAccessCallable = httpsCallable(firebaseFunctions, 'checkAccess', { timeout: 12000 });
+const checkAccessCallable = httpsCallable(firebaseFunctions, 'checkAccess', { timeout: 5000 });
 const googleProvider = new GoogleAuthProvider();
 const appleProvider = new OAuthProvider('apple.com');
-const consentStorageKey = 'mesutxho-privacy-consent-v5';
+const consentStorageKey = 'mesutxho-privacy-consent-v6';
 
 let currentUser = null;
 let authReady = false;
@@ -57,11 +57,13 @@ let loginBusy = false;
 let localGuest = false;
 let accessDenied = false;
 let accessCheckPromise = null;
+let accessCheckUnavailable = false;
 let profileUnsubscribe = null;
 let loggedVisitKeys = new Set();
 let accessTimer = null;
 let durationTimer = null;
 let activeSession = null;
+let lastInteractionAt = Date.now();
 let authTimeoutId;
 
 try {
@@ -157,12 +159,14 @@ async function showBlocked(reason) {
 }
 
 function showAccessFailure(error) {
-  console.error('Site erişim denetimi başarısız:', error);
-  sitePage.classList.add('hidden');
-  blockedState.classList.add('hidden');
-  accessState.classList.remove('hidden');
-  accessMessage.textContent = 'Erişim güvenlik denetimi tamamlanamadı. Bağlantını kontrol edip yeniden dene.';
-  accessRetry.classList.remove('hidden');
+  if (!accessCheckUnavailable) {
+    const detail = error instanceof Error ? error.message : 'Erişim denetimi şu anda yanıt vermiyor.';
+    console.warn('Erişim denetimi şu anda kullanılamıyor; site erişimi sürdürülüyor.', detail);
+    accessCheckUnavailable = true;
+  }
+  authReady = true;
+  accessDenied = false;
+  showApp();
 }
 
 function showApp() {
@@ -227,8 +231,9 @@ async function recordCurrentVisit() {
 async function persistSessionDuration() {
   if (!activeSession || !consentCheckbox.checked) return;
   const durationSeconds = Math.floor((Date.now() - activeSession.startedAt) / 1000);
+  const active = Date.now() - lastInteractionAt <= 60 * 1000;
   try {
-    await updateSessionDuration(activeSession.id, activeSession.token, durationSeconds);
+    await updateSessionDuration(activeSession.id, activeSession.token, durationSeconds, active);
   } catch (error) {
     console.error('Oturum süresi Firebase’de güncellenemedi:', error);
     if (durationTimer !== null) {
@@ -254,10 +259,11 @@ async function refreshAccess() {
   accessCheckPromise = (async () => {
     try {
       const result = await checkAccessCallable();
-      if (result.data.allowed !== true) {
+      if (result.data?.allowed === false) {
         await showBlocked(result.data.reason);
         return false;
       }
+      accessCheckUnavailable = false;
       showApp();
       if (currentUser && consentCheckbox.checked) {
         void recordCurrentVisit();
@@ -265,7 +271,7 @@ async function refreshAccess() {
       return true;
     } catch (error) {
       showAccessFailure(error);
-      return false;
+      return true;
     } finally {
       accessCheckPromise = null;
     }
@@ -284,9 +290,7 @@ function watchUserBan(user) {
       void showBlocked('user');
     }
   }, (error) => {
-    console.error('Kullanıcı engel durumu canlı izlenemedi:', error);
-    socialStatus.textContent = 'Hesap engel durumu doğrulanamadı. Güvenlik nedeniyle erişim yenileniyor.';
-    void refreshAccess();
+    console.warn('Kullanıcı ban durumu geçici olarak doğrulanamıyor:', error);
   });
 }
 
@@ -503,9 +507,9 @@ accessRetry.addEventListener('click', () => {
 
 authTimeoutId = window.setTimeout(() => {
   if (!authReady) {
-    showAccessFailure(new Error('Firebase Authentication başlangıç durumu 12 saniyede yanıt vermedi.'));
+    showAccessFailure(new Error('Firebase Authentication başlangıç durumu zaman aşımına uğradı.'));
   }
-}, 12000);
+}, 5000);
 
 onAuthStateChanged(firebaseAuth, (user) => {
   window.clearTimeout(authTimeoutId);
@@ -541,6 +545,12 @@ document.addEventListener('visibilitychange', () => {
   startBackgroundVideo();
   void refreshAccess();
 });
+
+for (const eventName of ['pointerdown', 'keydown', 'touchstart', 'scroll', 'input']) {
+  document.addEventListener(eventName, () => {
+    lastInteractionAt = Date.now();
+  }, { passive: true });
+}
 
 startBackgroundVideo();
 backgroundAudio.load();

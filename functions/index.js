@@ -10,15 +10,12 @@ initializeApp();
 
 const database = getFirestore();
 const adminEmail = 'mes223ut@gmail.com';
-const privacyNoticeVersion = '2026-10-14-v5';
+const privacyNoticeVersion = '2026-10-14-v6';
 const sessionRetentionDays = 90;
 
 function getClientIp(request) {
   const ip = request.rawRequest.ip;
-  if (typeof ip !== 'string' || net.isIP(ip) === 0) {
-    throw new HttpsError('failed-precondition', 'Ziyaretçi IP adresi güvenilir şekilde belirlenemedi.');
-  }
-  return ip;
+  return typeof ip === 'string' && net.isIP(ip) !== 0 ? ip : '';
 }
 
 function getIpDocumentId(ip) {
@@ -42,9 +39,11 @@ function requireAdmin(request) {
 }
 
 async function getAccessStatus(ip, uid) {
-  const ipDocument = await database.collection('bannedIPs').doc(getIpDocumentId(ip)).get();
-  if (ipDocument.exists && ipDocument.get('banned') === true) {
-    return { allowed: false, reason: 'ip' };
+  if (ip) {
+    const ipDocument = await database.collection('bannedIPs').doc(getIpDocumentId(ip)).get();
+    if (ipDocument.exists && ipDocument.get('banned') === true) {
+      return { allowed: false, reason: 'ip' };
+    }
   }
 
   if (uid) {
@@ -129,37 +128,79 @@ function getAuthMethod(auth) {
 }
 
 async function getGeoLocation(ip) {
-  const response = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, {
-    signal: AbortSignal.timeout(4000),
-    headers: { accept: 'application/json' }
-  });
-  if (!response.ok) {
-    throw new Error(`GeoIP service returned HTTP ${response.status}.`);
-  }
+  const endpoints = [
+    {
+      url: `https://ipapi.co/${encodeURIComponent(ip)}/json/`,
+      parse(data) {
+        if (data.error === true) throw new Error('ipapi.co lookup failed.');
+        return {
+          city: data.city,
+          region: data.region,
+          postalCode: data.postal,
+          country: data.country_name,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          timezone: data.timezone,
+          isp: data.org
+        };
+      }
+    },
+    {
+      url: `https://ipwho.is/${encodeURIComponent(ip)}`,
+      parse(data) {
+        if (data.success === false) throw new Error('ipwho.is lookup failed.');
+        return {
+          city: data.city,
+          region: data.region,
+          postalCode: data.postal,
+          country: data.country,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          timezone: data.timezone?.id,
+          isp: data.connection?.isp || data.connection?.org
+        };
+      }
+    }
+  ];
 
-  const data = await response.json();
-  if (data.error === true) {
-    throw new Error(`GeoIP service rejected the lookup: ${String(data.reason || 'unknown error')}.`);
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint.url, {
+        signal: AbortSignal.timeout(3000),
+        headers: { accept: 'application/json' }
+      });
+      if (!response.ok) throw new Error(`GeoIP service returned HTTP ${response.status}.`);
+      const data = endpoint.parse(await response.json());
+      if (!data.city && !data.country && !data.isp) {
+        throw new Error('GeoIP service returned no location details.');
+      }
+      const text = (value, maxLength) => (
+        typeof value === 'string' ? value.slice(0, maxLength) : ''
+      );
+      const coordinate = (value) => (
+        typeof value === 'number' && Number.isFinite(value) ? value : null
+      );
+      return {
+        city: text(data.city, 120),
+        region: text(data.region, 120),
+        postalCode: text(data.postalCode, 32),
+        country: text(data.country, 120),
+        latitude: coordinate(data.latitude),
+        longitude: coordinate(data.longitude),
+        timezone: text(data.timezone, 80),
+        isp: text(data.isp, 200)
+      };
+    } catch (error) {
+      logger.warn('GeoIP provider failed; trying the next provider.', error);
+    }
   }
-  const coordinates = (value) => (
-    typeof value === 'number' && Number.isFinite(value) ? value : null
-  );
-  return {
-    city: typeof data.city === 'string' ? data.city.slice(0, 120) : '',
-    region: typeof data.region === 'string' ? data.region.slice(0, 120) : '',
-    postalCode: typeof data.postal === 'string' ? data.postal.slice(0, 32) : '',
-    country: typeof data.country_name === 'string' ? data.country_name.slice(0, 120) : '',
-    latitude: coordinates(data.latitude),
-    longitude: coordinates(data.longitude),
-    timezone: typeof data.timezone === 'string' ? data.timezone.slice(0, 80) : '',
-    isp: typeof data.org === 'string' ? data.org.slice(0, 200) : ''
-  };
+  throw new Error('All GeoIP providers failed.');
 }
 
 exports.checkAccess = onCall({ region: 'us-central1' }, async (request) => {
   const ip = getClientIp(request);
   const access = await getAccessStatus(ip, request.auth?.uid);
-  return { allowed: access.allowed, reason: access.reason };
+  return { allowed: access.allowed, reason: access.reason, ipAvailable: Boolean(ip) };
 });
 
 exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
@@ -168,8 +209,13 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
     throw new HttpsError('failed-precondition', 'Güncel gizlilik bildirimi onayı gereklidir.');
   }
 
-  const ip = getClientIp(request);
-  const access = await getAccessStatus(ip, request.auth?.uid);
+  const serverIp = getClientIp(request);
+  const clientIp = typeof request.data?.metadata?.clientIp === 'string'
+    && net.isIP(request.data.metadata.clientIp) !== 0
+    ? request.data.metadata.clientIp
+    : '';
+  const ip = serverIp || clientIp || 'Yerel/Gizli IP';
+  const access = await getAccessStatus(serverIp, request.auth?.uid);
   if (!access.allowed) {
     throw new HttpsError('permission-denied', 'Bu siteye erişiminiz engellenmiştir.');
   }
@@ -201,16 +247,37 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
     timezone: '',
     isp: ''
   };
-  let geoStatus = 'available';
+  let geoStatus = 'unavailable';
   try {
+    if (net.isIP(ip) === 0) throw new Error('A public client IP is unavailable.');
     geoLocation = await getGeoLocation(ip);
+    geoStatus = 'available';
     if (!geoLocation.city && !geoLocation.country && !geoLocation.isp) {
       geoStatus = 'unavailable';
       logger.warn('GeoIP provider returned no location for a visitor.');
     }
   } catch (error) {
-    geoStatus = 'unavailable';
-    logger.error('GeoIP lookup failed; recording the session with an unavailable location.', error);
+    const clientGeo = metadata.geoLocation && typeof metadata.geoLocation === 'object'
+      ? metadata.geoLocation
+      : {};
+    const text = (value, maxLength) => (
+      typeof value === 'string' ? value.slice(0, maxLength) : ''
+    );
+    const coordinate = (value) => (
+      typeof value === 'number' && Number.isFinite(value) ? value : null
+    );
+    geoLocation = {
+      city: text(clientGeo.city, 120),
+      region: text(clientGeo.region, 120),
+      postalCode: text(clientGeo.postalCode, 32),
+      country: text(clientGeo.country, 120),
+      latitude: coordinate(clientGeo.latitude),
+      longitude: coordinate(clientGeo.longitude),
+      timezone: text(clientGeo.timezone, 80),
+      isp: text(clientGeo.isp, 200)
+    };
+    geoStatus = Object.values(geoLocation).some(Boolean) ? 'client-fallback' : 'unavailable';
+    logger.warn('Server GeoIP lookup failed; using available client details if provided.', error);
   }
 
   const expiresAt = Timestamp.fromMillis(
@@ -255,6 +322,7 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
     consentAccepted: true,
     privacyNoticeVersion,
     durationSeconds: 0,
+    lastSeen: FieldValue.serverTimestamp(),
     durationTokenHash: crypto.createHash('sha256').update(durationToken).digest('hex'),
     createdAt: FieldValue.serverTimestamp(),
     expiresAt
@@ -266,6 +334,7 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
 exports.updateVisitDuration = onCall({ region: 'us-central1' }, async (request) => {
   const sessionId = request.data?.sessionId;
   const durationSeconds = request.data?.durationSeconds;
+  const active = request.data?.active;
   if (request.data?.consentAccepted !== true
     || request.data?.privacyNoticeVersion !== privacyNoticeVersion
     || typeof sessionId !== 'string'
@@ -275,7 +344,8 @@ exports.updateVisitDuration = onCall({ region: 'us-central1' }, async (request) 
     || request.data.durationToken.length !== 43
     || !Number.isInteger(durationSeconds)
     || durationSeconds < 0
-    || durationSeconds > 7 * 24 * 60 * 60) {
+    || durationSeconds > 7 * 24 * 60 * 60
+    || typeof active !== 'boolean') {
     throw new HttpsError('invalid-argument', 'Geçerli onaylı oturum ve süre gereklidir.');
   }
 
@@ -293,10 +363,12 @@ exports.updateVisitDuration = onCall({ region: 'us-central1' }, async (request) 
   if (!ownsSession && !hasValidToken) {
     throw new HttpsError('permission-denied', 'Bu oturum kaydını güncelleme yetkiniz yok.');
   }
-  await sessionRef.update({
+  const update = {
     durationSeconds,
     lastActivityAt: FieldValue.serverTimestamp()
-  });
+  };
+  if (active) update.lastSeen = FieldValue.serverTimestamp();
+  await sessionRef.update(update);
   return { updated: true };
 });
 

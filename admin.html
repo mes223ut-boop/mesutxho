@@ -88,8 +88,9 @@
             <p>
               Yönetici oturumun açık onayınla IP/konum/ISP, cihaz ve tarayıcı ayrıntıları,
               ekran/dil/referrer, giriş yöntemi, oturum süresi ve profil bilgilerini 90 güne
-              kadar kaydeder. IP'den yaklaşık konum için ipapi.co kullanılır; servis yanıt
-              vermezse kayıt konum olmadan oluşturulur. Kayıtlar yetkili yönetici ve Firebase
+              kadar kaydeder. IP'den yaklaşık konum için birden fazla yedek GeoIP servisi
+              kullanılır; bu servisler yanıt vermezse konum bilinmiyor olarak kalır.
+              Kayıtlar yetkili yönetici ve Firebase
               proje yöneticileri tarafından görülebilir.
             </p>
             <label class="consent-label">
@@ -120,7 +121,7 @@
                 <article class="metric-card metric-active">
                   <span class="metric-label">Aktif kullanıcı</span>
                   <strong id="metric-active" class="metric-value">—</strong>
-                  <span class="metric-caption">Son 30 gündeki farklı hesap/ziyaretçi</span>
+                  <span class="metric-caption">Son 5 dakika içinde etkin hesap/oturum</span>
                 </article>
                 <article class="metric-card metric-devices">
                   <span class="metric-label">Cihaz türleri</span>
@@ -214,7 +215,7 @@
                 </div>
                 <div class="table-scroll">
                   <table>
-                    <thead><tr><th>Kullanıcı / E-posta</th><th>Profil</th><th>Yöntem</th><th>UID</th><th>IP</th><th>Referrer / Sayfa</th><th>Süre</th><th>Giriş zamanı</th><th>Ban işlemi</th></tr></thead>
+                    <thead><tr><th>Kullanıcı / E-posta</th><th>Profil</th><th>Yöntem</th><th>UID</th><th>IP</th><th>Konum</th><th>ISP</th><th>Cihaz / Sistem</th><th>Referrer / Sayfa</th><th>Süre</th><th>Giriş zamanı</th><th>Ban işlemi</th></tr></thead>
                     <tbody id="user-rows"></tbody>
                   </table>
                 </div>
@@ -230,6 +231,6 @@
         </section>
       </div>
     </main>
-    <script type="module" src="admin.js?v=20261014-5"></script>
+    <script type="module" src="admin.js?v=20261014-6"></script>
   </body>
 </html>
