@@ -222,7 +222,7 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
     && net.isIP(request.data.metadata.clientIp) !== 0
     ? request.data.metadata.clientIp
     : '';
-  const ip = serverIp || clientIp || 'Bilinmeyen IP';
+  const ip = clientIp || serverIp || 'Bilinmeyen IP';
   const access = await getAccessStatus(serverIp, request.auth?.uid);
   if (!access.allowed) {
     throw new HttpsError('permission-denied', 'Bu siteye erişiminiz engellenmiştir.');

@@ -3,8 +3,8 @@ import {
   firebaseAuth,
   firebaseDatabase,
   firebaseFunctions
-} from './firebase-config.js?v=20261014-7';
-import { recordUserSession } from './session-records.js?v=20261014-7';
+} from './firebase-config.js?v=20261014-8';
+import { recordUserSession } from './session-records.js?v=20261014-8';
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -54,6 +54,7 @@ const providerBreakdown = document.getElementById('provider-breakdown');
 const googleProvider = new GoogleAuthProvider();
 const setUserBan = httpsCallable(firebaseFunctions, 'setUserBan', { timeout: 15000 });
 const setIpBan = httpsCallable(firebaseFunctions, 'setIpBan', { timeout: 15000 });
+const adminConsentStorageKey = 'mesutxho-admin-privacy-consent-v7';
 
 let currentUser = null;
 let sessions = [];
@@ -69,6 +70,12 @@ let authResolved = false;
 let authTimeoutId;
 let activeMetricTimer = null;
 const busyActions = new Set();
+
+try {
+  consentCheckbox.checked = sessionStorage.getItem(adminConsentStorageKey) === 'accepted';
+} catch (error) {
+  console.warn('Yönetici gizlilik onayı bu sekmede saklanamadı:', error);
+}
 
 function withTimeout(promise, timeoutMs, message) {
   let timeoutId;
@@ -638,7 +645,7 @@ function startListeners() {
       renderAll();
       status.textContent = `${sessions.length.toLocaleString('tr-TR')} ziyaret kaydı canlı olarak izleniyor.`;
       content.classList.remove('hidden');
-      loginConsent.classList.add('hidden');
+      loginConsent.classList.toggle('hidden', consentCheckbox.checked);
       loginButton.classList.add('hidden');
       signOutButton.classList.remove('hidden');
     };
@@ -707,7 +714,7 @@ async function handleAuthStateChanged(user, generation) {
     }
 
     currentUser = adminUser;
-    loginConsent.classList.add('hidden');
+    loginConsent.classList.toggle('hidden', consentCheckbox.checked);
     loginButton.classList.add('hidden');
     signOutButton.classList.remove('hidden');
     startListeners();
@@ -724,9 +731,11 @@ async function recordAdminVisit() {
   adminVisitLogged = true;
   try {
     await recordUserSession(currentUser);
+    loginConsent.classList.add('hidden');
   } catch (error) {
     adminVisitLogged = false;
     console.error('Yönetici oturumu kaydedilemedi:', error);
+    loginConsent.classList.remove('hidden');
     status.textContent = 'Yönetici girişi başarılı; ancak onaylı oturum kaydı oluşturulamadı.';
   }
 }
@@ -760,8 +769,19 @@ loginButton.addEventListener('click', async () => {
 
 consentCheckbox.addEventListener('change', () => {
   loginButton.disabled = !consentCheckbox.checked || authFlowActive;
+  try {
+    if (consentCheckbox.checked) {
+      sessionStorage.setItem(adminConsentStorageKey, 'accepted');
+    } else {
+      sessionStorage.removeItem(adminConsentStorageKey);
+    }
+  } catch (error) {
+    console.warn('Yönetici gizlilik onayı bu sekmede saklanamadı:', error);
+  }
   if (consentCheckbox.checked && currentUser) {
     void recordAdminVisit();
+  } else if (currentUser) {
+    loginConsent.classList.remove('hidden');
   }
 });
 
