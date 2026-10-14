@@ -3,16 +3,15 @@ import {
   firebaseAuth,
   firebaseDatabase,
   firebaseFunctions
-} from './firebase-config.js?v=20261014-6';
+} from './firebase-config.js?v=20261014-7';
 import {
   recordUserSession,
   updateSessionDuration
-} from './session-records.js?v=20261014-6';
+} from './session-records.js?v=20261014-7';
 import {
   GoogleAuthProvider,
   OAuthProvider,
   onAuthStateChanged,
-  signInAnonymously,
   signInWithPopup,
   signOut
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
@@ -34,7 +33,6 @@ const socialScreen = document.getElementById('social-screen');
 const loginButton = document.getElementById('google-login');
 const appleLoginButton = document.getElementById('apple-login');
 const guestButton = document.getElementById('guest-button');
-const anonymousButton = document.getElementById('anonymous-button');
 const consentCheckbox = document.getElementById('privacy-consent');
 const socialConsentCheckbox = document.getElementById('social-privacy-consent');
 const loginNote = document.getElementById('login-note');
@@ -49,7 +47,7 @@ const volumeSlider = document.getElementById('volume-slider');
 const checkAccessCallable = httpsCallable(firebaseFunctions, 'checkAccess', { timeout: 5000 });
 const googleProvider = new GoogleAuthProvider();
 const appleProvider = new OAuthProvider('apple.com');
-const consentStorageKey = 'mesutxho-privacy-consent-v6';
+const consentStorageKey = 'mesutxho-privacy-consent-v7';
 
 let currentUser = null;
 let authReady = false;
@@ -92,7 +90,7 @@ function updateAudioControl() {
 }
 
 function playMusic(reportFailure = false) {
-  return backgroundAudio.play().catch((error) => {
+  return backgroundAudio.play().then(() => true).catch((error) => {
     if (error.name !== 'NotAllowedError' || reportFailure) {
       console.warn('Background music playback failed:', error);
       loginNote.textContent = 'Müzik başlatılamadı. Oynat düğmesine dokunarak tekrar deneyebilirsin.';
@@ -123,11 +121,9 @@ function updateAdminLink(user) {
 }
 
 function updateLoginButtons() {
-  const disabled = !consentCheckbox.checked || loginBusy;
-  loginButton.disabled = disabled;
-  appleLoginButton.disabled = disabled;
+  loginButton.disabled = loginBusy;
+  appleLoginButton.disabled = loginBusy;
   guestButton.disabled = loginBusy;
-  anonymousButton.disabled = !consentCheckbox.checked || loginBusy;
 }
 
 function stopProfileListener() {
@@ -182,7 +178,7 @@ function showApp() {
   if (localGuest) {
     showSocials();
     updateAdminLink(null);
-    socialStatus.textContent = 'Misafir olarak devam ediyorsun. Bu oturumda giriş yapılmadı.';
+    socialStatus.textContent = 'Misafir Ziyaretçi olarak devam ediyorsun. Bu oturumda giriş yapılmadı.';
     return;
   }
   showLogin();
@@ -219,7 +215,7 @@ async function recordCurrentVisit() {
   } catch (error) {
     loggedVisitKeys.delete(visitKey);
     console.error('Oturum kaydı Firebase’e yazılamadı:', error);
-    const message = 'Oturum kaydı oluşturulamadı. Bağlantıyı ve Firebase Functions dağıtımını kontrol et.';
+    const message = 'Onaylı ziyaret kaydı oluşturulamadı. Bağlantıyı ve Firebase Functions dağıtımını kontrol et.';
     if (currentUser || localGuest) {
       socialStatus.textContent = message;
     } else {
@@ -265,12 +261,15 @@ async function refreshAccess() {
       }
       accessCheckUnavailable = false;
       showApp();
-      if (currentUser && consentCheckbox.checked) {
+      if (consentCheckbox.checked) {
         void recordCurrentVisit();
       }
       return true;
     } catch (error) {
       showAccessFailure(error);
+      if (consentCheckbox.checked) {
+        void recordCurrentVisit();
+      }
       return true;
     } finally {
       accessCheckPromise = null;
@@ -311,7 +310,7 @@ function getSignInErrorMessage(error, providerName) {
 }
 
 async function handleProviderSignIn(provider, providerName) {
-  if (!consentCheckbox.checked || loginBusy) {
+  if (loginBusy) {
     return;
   }
   loginBusy = true;
@@ -319,15 +318,17 @@ async function handleProviderSignIn(provider, providerName) {
   loginNote.textContent = `${providerName} hesabı açılıyor...`;
 
   try {
-    try {
-      sessionStorage.setItem(consentStorageKey, 'accepted');
-    } catch (error) {
-      console.warn('Consent could not be stored for this tab:', error);
+    if (consentCheckbox.checked) {
+      try {
+        sessionStorage.setItem(consentStorageKey, 'accepted');
+      } catch (error) {
+        console.warn('Consent could not be stored for this tab:', error);
+      }
     }
     await signInWithPopup(firebaseAuth, provider);
     await refreshAccess();
     if (!accessDenied && currentUser) {
-      await recordCurrentVisit();
+      void recordCurrentVisit();
     }
   } catch (error) {
     console.error(`${providerName} girişi başarısız:`, error);
@@ -348,22 +349,22 @@ function handleConsentChange(accepted) {
   try {
     if (accepted) {
       sessionStorage.setItem(consentStorageKey, 'accepted');
-      if (currentUser || localGuest) {
-        void recordCurrentVisit();
-      }
     } else {
       sessionStorage.removeItem(consentStorageKey);
-      loggedVisitKeys = new Set();
-      activeSession = null;
-      if (durationTimer !== null) {
-        window.clearInterval(durationTimer);
-        durationTimer = null;
-      }
-      socialStatus.textContent = 'Bu ziyaret için yeni oturum kaydı tutulmayacak.';
     }
   } catch (error) {
-    console.error('Consent preference could not be saved:', error);
-    loginNote.textContent = 'Onay tercihi bu sekmede saklanamadı.';
+    console.warn('Consent preference could not be saved for this tab:', error);
+  }
+  if (accepted) {
+    void recordCurrentVisit();
+  } else {
+    loggedVisitKeys = new Set();
+    activeSession = null;
+    if (durationTimer !== null) {
+      window.clearInterval(durationTimer);
+      durationTimer = null;
+    }
+    socialStatus.textContent = 'Bu ziyaret için yeni oturum kaydı tutulmayacak.';
   }
 }
 
@@ -393,60 +394,16 @@ guestButton.addEventListener('click', async () => {
   updateLoginButtons();
   loginNote.textContent = '';
   try {
-    if (!consentCheckbox.checked) {
-      if (currentUser) {
-        await signOut(firebaseAuth);
-      }
-      localGuest = true;
-      await refreshAccess();
-      return;
-    }
-
-    try {
-      sessionStorage.setItem(consentStorageKey, 'accepted');
-    } catch (error) {
-      console.warn('Consent could not be stored for this tab:', error);
-    }
-    await signInAnonymously(firebaseAuth);
-    await refreshAccess();
-    if (!accessDenied && currentUser) {
-      await recordCurrentVisit();
-    }
-  } catch (error) {
-    console.error('Misafir oturumu açılamadı:', error);
-    loginNote.textContent = error.code?.startsWith('auth/')
-      ? getSignInErrorMessage(error, 'Misafir')
-      : 'Misafir erişimi başlatılamadı. Bağlantını kontrol edip tekrar dene.';
-  } finally {
-    loginBusy = false;
-    updateLoginButtons();
-  }
-});
-
-anonymousButton.addEventListener('click', async () => {
-  if (!consentCheckbox.checked || loginBusy) {
-    return;
-  }
-  loginBusy = true;
-  updateLoginButtons();
-  try {
-    try {
-      sessionStorage.setItem(consentStorageKey, 'accepted');
-    } catch (error) {
-      console.warn('Consent could not be stored for this tab:', error);
-    }
-    if (currentUser) {
-      await signOut(firebaseAuth);
-    }
+    if (currentUser) await signOut(firebaseAuth);
     currentUser = null;
     localGuest = true;
     await refreshAccess();
-    if (!accessDenied) {
-      await recordCurrentVisit();
+    if (!accessDenied && consentCheckbox.checked) {
+      void recordCurrentVisit();
     }
   } catch (error) {
-    console.error('Anonim ziyaret başlatılamadı:', error);
-    loginNote.textContent = 'Anonim erişim başlatılamadı. Bağlantını kontrol edip tekrar dene.';
+    console.error('Misafir oturumu açılamadı:', error);
+    loginNote.textContent = 'Misafir erişimi başlatılamadı. Tekrar dene.';
   } finally {
     loginBusy = false;
     updateLoginButtons();
@@ -483,18 +440,27 @@ backgroundAudio.addEventListener('play', updateAudioControl);
 backgroundAudio.addEventListener('pause', updateAudioControl);
 backgroundAudio.addEventListener('volumechange', updateAudioControl);
 
+let audioStartPromise = null;
+
 function startMusicAfterFirstInteraction(event) {
   if (event.target instanceof Element && audioToggle.contains(event.target)) {
     return;
   }
-  document.removeEventListener('pointerdown', startMusicAfterFirstInteraction, true);
-  document.removeEventListener('touchstart', startMusicAfterFirstInteraction, true);
-  document.removeEventListener('keydown', startMusicAfterFirstInteraction, true);
-  void playMusic(true);
+  if (audioStartPromise) return;
+  audioStartPromise = playMusic();
+  void audioStartPromise.then((playing) => {
+    audioStartPromise = null;
+    if (!playing) return;
+    document.removeEventListener('pointerdown', startMusicAfterFirstInteraction, true);
+    document.removeEventListener('touchstart', startMusicAfterFirstInteraction, true);
+    document.removeEventListener('click', startMusicAfterFirstInteraction, true);
+    document.removeEventListener('keydown', startMusicAfterFirstInteraction, true);
+  });
 }
 
 document.addEventListener('pointerdown', startMusicAfterFirstInteraction, true);
 document.addEventListener('touchstart', startMusicAfterFirstInteraction, { capture: true, passive: true });
+document.addEventListener('click', startMusicAfterFirstInteraction, true);
 document.addEventListener('keydown', startMusicAfterFirstInteraction, true);
 
 accessRetry.addEventListener('click', () => {

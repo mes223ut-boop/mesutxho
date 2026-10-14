@@ -3,8 +3,8 @@ import {
   firebaseAuth,
   firebaseDatabase,
   firebaseFunctions
-} from './firebase-config.js?v=20261014-6';
-import { recordUserSession } from './session-records.js?v=20261014-6';
+} from './firebase-config.js?v=20261014-7';
+import { recordUserSession } from './session-records.js?v=20261014-7';
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -57,6 +57,8 @@ const setIpBan = httpsCallable(firebaseFunctions, 'setIpBan', { timeout: 15000 }
 
 let currentUser = null;
 let sessions = [];
+let legacySessions = [];
+let visitRecords = [];
 let bannedUsers = new Map();
 let bannedIps = new Map();
 let subscriptions = [];
@@ -65,6 +67,7 @@ let authFlowActive = false;
 let adminVisitLogged = false;
 let authResolved = false;
 let authTimeoutId;
+let activeMetricTimer = null;
 const busyActions = new Set();
 
 function withTimeout(promise, timeoutMs, message) {
@@ -78,7 +81,13 @@ function withTimeout(promise, timeoutMs, message) {
 function stopListeners() {
   subscriptions.forEach((unsubscribe) => unsubscribe());
   subscriptions = [];
+  if (activeMetricTimer !== null) {
+    window.clearInterval(activeMetricTimer);
+    activeMetricTimer = null;
+  }
   sessions = [];
+  legacySessions = [];
+  visitRecords = [];
   bannedUsers = new Map();
   bannedIps = new Map();
 }
@@ -105,11 +114,11 @@ function formatTimestamp(value) {
 }
 
 function formatUser(record) {
-  return record.displayName || record.email || record.uid || 'Anonim ziyaretçi';
+  return record.displayName || record.email || record.uid || 'Misafir Ziyaretçi';
 }
 
 function getAuthMethod(record) {
-  return record.authMethod || (record.uid ? 'Google' : 'Anonymous');
+  return record.authMethod || (record.uid ? 'Other' : 'Guest');
 }
 
 function formatDuration(value) {
@@ -168,7 +177,7 @@ function createActionButton(label, callback, className = 'action-button') {
 }
 
 function getIp(record) {
-  if (typeof record.ip !== 'string') return 'Yerel/Gizli IP';
+  if (typeof record.ip !== 'string') return 'Bilinmeyen IP';
   const ip = record.ip.trim();
   const ipv4Parts = ip.split('.');
   const isIpv4 = ipv4Parts.length === 4 && ipv4Parts.every((part) => (
@@ -179,15 +188,15 @@ function getIp(record) {
     try {
       if (new URL(`http://[${ip}]/`).hostname) return ip;
     } catch {
-      return 'Yerel/Gizli IP';
+      return 'Bilinmeyen IP';
     }
   }
-  return 'Yerel/Gizli IP';
+  return 'Bilinmeyen IP';
 }
 
 function getLocation(record) {
   const location = [record.city, record.region, record.country].filter(Boolean).join(', ');
-  return location || 'Bilinmiyor';
+  return location || record.location || 'Bilinmiyor';
 }
 
 function getDevice(record) {
@@ -288,6 +297,7 @@ function renderIpRows() {
     record.ip,
     record.city,
     record.region,
+    record.location,
     record.country,
     record.postalCode,
     record.timezone,
@@ -324,7 +334,7 @@ function renderIpRows() {
       () => void changeIpBan(ip, !ipIsBanned),
       ipIsBanned ? 'action-button unban-button' : 'action-button danger-button'
     );
-    button.disabled = ip === 'Yerel/Gizli IP' || busyActions.has(`ip:${ip}`);
+    button.disabled = ip === 'Bilinmeyen IP' || busyActions.has(`ip:${ip}`);
     actionCell.appendChild(button);
     row.appendChild(actionCell);
     fragment.appendChild(row);
@@ -417,7 +427,7 @@ function renderUserRows() {
     getDevice(record)
   ].some((value) => typeof value === 'string' && value.toLocaleLowerCase('tr-TR').includes(term)));
   if (!filtered.length) {
-    showEmpty(recordRows.users, term ? 'Aramanla eşleşen kayıt bulunamadı.' : 'Henüz kullanıcı/oturum kaydı bulunmuyor.', 12);
+    showEmpty(recordRows.users, term ? 'Aramanla eşleşen kayıt bulunamadı.' : 'Henüz kullanıcı/oturum kaydı bulunmuyor.', 13);
     return;
   }
 
@@ -425,7 +435,8 @@ function renderUserRows() {
   for (const record of filtered) {
     const row = document.createElement('tr');
     addCell(row, `${formatUser(record)}${record.email && record.displayName ? ` · ${record.email}` : ''}`);
-    addLinkCell(row, record.photoURL, record.photoURL ? 'Profil fotoğrafı' : '');
+    addLinkCell(row, record.photoURL, record.photoURL || '');
+    addCell(row, record.phoneNumber);
     addCell(row, getAuthMethod(record));
     addCell(row, record.uid);
     addCell(row, getIp(record));
@@ -449,7 +460,7 @@ function renderUserRows() {
       actionGroup.appendChild(banButton);
     }
     const ip = getIp(record);
-    if (ip !== 'Yerel/Gizli IP') {
+    if (ip !== 'Bilinmeyen IP') {
       const ipIsBanned = bannedIps.has(ip);
       actionGroup.appendChild(createActionButton(
         ipIsBanned ? 'IP banını kaldır' : 'IP banla',
@@ -617,21 +628,35 @@ function showError(error) {
 function startListeners() {
   stopListeners();
   status.textContent = 'Ziyaret, IP ve kullanıcı kayıtları canlı yükleniyor...';
+  activeMetricTimer = window.setInterval(renderActiveUsers, 15000);
   try {
-    subscriptions.push(onSnapshot(collection(firebaseDatabase, 'sessions'), (snapshot) => {
-      sessions = snapshot.docs.map((document) => ({
-        id: document.id,
-        ...document.data({ serverTimestamps: 'estimate' })
-      }));
+    const updateVisits = () => {
+      sessions = [...legacySessions, ...visitRecords];
       sessions.sort((left, right) => (
         (sessionDate(right)?.getTime() || 0) - (sessionDate(left)?.getTime() || 0)
       ));
       renderAll();
-      status.textContent = `${sessions.length.toLocaleString('tr-TR')} oturum kaydı canlı olarak izleniyor.`;
+      status.textContent = `${sessions.length.toLocaleString('tr-TR')} ziyaret kaydı canlı olarak izleniyor.`;
       content.classList.remove('hidden');
       loginConsent.classList.add('hidden');
       loginButton.classList.add('hidden');
       signOutButton.classList.remove('hidden');
+    };
+
+    subscriptions.push(onSnapshot(collection(firebaseDatabase, 'visits'), (snapshot) => {
+      visitRecords = snapshot.docs.map((document) => ({
+        id: `visit:${document.id}`,
+        ...document.data({ serverTimestamps: 'estimate' })
+      }));
+      updateVisits();
+    }, showError));
+
+    subscriptions.push(onSnapshot(collection(firebaseDatabase, 'sessions'), (snapshot) => {
+      legacySessions = snapshot.docs.map((document) => ({
+        id: `session:${document.id}`,
+        ...document.data({ serverTimestamps: 'estimate' })
+      }));
+      updateVisits();
     }, showError));
 
     subscriptions.push(onSnapshot(collection(firebaseDatabase, 'users'), (snapshot) => {
@@ -687,7 +712,7 @@ async function handleAuthStateChanged(user, generation) {
     signOutButton.classList.remove('hidden');
     startListeners();
     if (consentCheckbox.checked && !adminVisitLogged) {
-      await recordAdminVisit();
+      void recordAdminVisit();
     }
   } catch (error) {
     if (generation === authGeneration) showError(error);
@@ -720,7 +745,7 @@ loginButton.addEventListener('click', async () => {
       return;
     }
     currentUser = adminUser;
-    await recordAdminVisit();
+    void recordAdminVisit();
   } catch (error) {
     console.error('Yönetici girişi başarısız:', error);
     status.textContent = error.code === 'auth/unauthorized-domain'

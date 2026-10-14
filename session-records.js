@@ -1,7 +1,7 @@
-import { firebaseFunctions } from './firebase-config.js?v=20261014-6';
+import { firebaseFunctions } from './firebase-config.js?v=20261014-7';
 import { httpsCallable } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-functions.js';
 
-export const privacyNoticeVersion = '2026-10-14-v6';
+export const privacyNoticeVersion = '2026-10-14-v7';
 
 const recordVisit = httpsCallable(firebaseFunctions, 'recordVisit', { timeout: 35000 });
 const updateVisitDuration = httpsCallable(firebaseFunctions, 'updateVisitDuration', { timeout: 10000 });
@@ -16,21 +16,6 @@ async function requestJson(url) {
     });
     if (!response.ok) throw new Error(`Network information service returned HTTP ${response.status}.`);
     return await response.json();
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-}
-
-async function requestText(url) {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 3000);
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: { accept: 'application/json, text/plain' }
-    });
-    if (!response.ok) throw new Error(`Network information service returned HTTP ${response.status}.`);
-    return await response.text();
   } finally {
     window.clearTimeout(timeoutId);
   }
@@ -76,38 +61,19 @@ async function getClientNetworkDetails() {
   let geo = null;
 
   try {
-    const data = await requestJson('https://ipapi.co/json/');
-    if (typeof data.ip === 'string') ip = data.ip;
-    if (ip && data.error !== true) {
-      geo = normalizeClientGeo(data, 'ipapi');
-      if (!geo.city && !geo.country && !geo.isp) geo = null;
-    }
+    const data = await requestJson('https://api.ipify.org?format=json');
+    if (typeof data.ip !== 'string' || !data.ip) throw new Error('ipify returned no IP address.');
+    ip = data.ip;
   } catch {
-    // Continue with the next public-IP provider.
-  }
-
-  if (!ip) {
     try {
-      const data = await requestText('https://api.bigdatacloud.net/data/client-ip');
-      const parsed = (() => {
-        try {
-          return JSON.parse(data);
-        } catch {
-          return { ipString: data.trim() };
-        }
-      })();
-      ip = typeof parsed.ipString === 'string' ? parsed.ipString : '';
+      const data = await requestJson('https://ipapi.co/json/');
+      if (typeof data.ip === 'string') ip = data.ip;
+      if (ip && data.error !== true) {
+        geo = normalizeClientGeo(data, 'ipapi');
+        if (!geo.city && !geo.country && !geo.isp) geo = null;
+      }
     } catch {
-      // Continue with the final public-IP provider.
-    }
-  }
-
-  if (!ip) {
-    try {
-      const data = await requestJson('https://api.ipify.org?format=json');
-      ip = typeof data.ip === 'string' ? data.ip : '';
-    } catch {
-      // IP logging is optional; visit recording still proceeds without it.
+      // IP and location are optional; the visit can still be recorded.
     }
   }
 
@@ -191,7 +157,14 @@ export async function recordUserSession(user = null) {
   } catch (error) {
     console.warn('Optional visitor network details are unavailable:', error);
   }
+  let clientHints = {};
+  try {
+    clientHints = await getClientHints();
+  } catch (error) {
+    console.warn('Optional browser details are unavailable:', error);
+  }
   const metadata = {
+    displayName: user?.displayName || '',
     photoURL: user?.photoURL || '',
     clientIp: networkDetails.ip,
     geoLocation: networkDetails.geo,
@@ -201,7 +174,7 @@ export async function recordUserSession(user = null) {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
     referrer: getReferrer(),
     pagePath: window.location.pathname,
-    clientHints: await getClientHints()
+    clientHints
   };
   const result = await recordVisit({
     consentAccepted: true,

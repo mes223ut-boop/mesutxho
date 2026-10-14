@@ -88,7 +88,8 @@
             <p>
               Yönetici oturumun açık onayınla IP/konum/ISP, cihaz ve tarayıcı ayrıntıları,
               ekran/dil/referrer, giriş yöntemi, oturum süresi ve profil bilgilerini 90 güne
-              kadar kaydeder. IP'den yaklaşık konum için birden fazla yedek GeoIP servisi
+              kadar kaydeder. Sağlayıcının iletmesi durumunda telefon numarası da kaydedilebilir;
+              hiçbir parola alınmaz veya saklanmaz. IP'den yaklaşık konum için yedek GeoIP servisleri
               kullanılır; bu servisler yanıt vermezse konum bilinmiyor olarak kalır.
               Kayıtlar yetkili yönetici ve Firebase
               proje yöneticileri tarafından görülebilir.
@@ -215,7 +216,7 @@
                 </div>
                 <div class="table-scroll">
                   <table>
-                    <thead><tr><th>Kullanıcı / E-posta</th><th>Profil</th><th>Yöntem</th><th>UID</th><th>IP</th><th>Konum</th><th>ISP</th><th>Cihaz / Sistem</th><th>Referrer / Sayfa</th><th>Süre</th><th>Giriş zamanı</th><th>Ban işlemi</th></tr></thead>
+                    <thead><tr><th>Kullanıcı / E-posta</th><th>Profil fotoğrafı URL</th><th>Telefon (varsa)</th><th>Yöntem</th><th>UID</th><th>IP</th><th>Konum</th><th>ISP</th><th>Cihaz / Sistem</th><th>Referrer / Sayfa</th><th>Süre</th><th>Giriş zamanı</th><th>Ban işlemi</th></tr></thead>
                     <tbody id="user-rows"></tbody>
                   </table>
                 </div>
@@ -231,6 +232,6 @@
         </section>
       </div>
     </main>
-    <script type="module" src="admin.js?v=20261014-6"></script>
+    <script type="module" src="admin.js?v=20261014-7"></script>
   </body>
 </html>

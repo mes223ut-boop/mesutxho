@@ -276,6 +276,7 @@ h2 {
 
 .login-button {
   display: flex;
+  width: 100%;
   min-height: 52px;
   align-items: center;
   justify-content: center;
@@ -335,6 +336,11 @@ h2 {
   font-size: 13px;
   font-weight: 600;
   transition: background 160ms ease, border-color 160ms ease;
+}
+
+.login-guest-button {
+  width: 100%;
+  margin-top: 11px;
 }
 
 .guest-button:hover {

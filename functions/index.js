@@ -10,7 +10,7 @@ initializeApp();
 
 const database = getFirestore();
 const adminEmail = 'mes223ut@gmail.com';
-const privacyNoticeVersion = '2026-10-14-v6';
+const privacyNoticeVersion = '2026-10-14-v7';
 const sessionRetentionDays = 90;
 
 function getClientIp(request) {
@@ -101,6 +101,12 @@ function getDeviceDetails(userAgent, clientHints = {}) {
   } else if (/Linux/i.test(userAgent)) {
     operatingSystem = 'Linux';
   }
+  let deviceModel = '';
+  if (/iPhone/i.test(userAgent)) deviceModel = 'iPhone';
+  else if (/iPad/i.test(userAgent)) deviceModel = 'iPad';
+  else if (/Android/i.test(userAgent)) deviceModel = 'Android cihaz';
+  else if (/Windows/i.test(userAgent)) deviceModel = 'Windows PC';
+  else if (/Macintosh|Mac OS X/i.test(userAgent)) deviceModel = 'Mac';
 
   return {
     deviceType,
@@ -114,17 +120,19 @@ function getDeviceDetails(userAgent, clientHints = {}) {
     operatingSystemVersion: typeof clientHints.platformVersion === 'string'
       ? clientHints.platformVersion.slice(0, 40)
       : operatingSystemVersion,
-    deviceModel: typeof clientHints.deviceModel === 'string' ? clientHints.deviceModel.slice(0, 120) : ''
+    deviceModel: typeof clientHints.deviceModel === 'string' && clientHints.deviceModel
+      ? clientHints.deviceModel.slice(0, 120)
+      : deviceModel
   };
 }
 
 function getAuthMethod(auth) {
-  if (!auth) return 'Anonymous';
+  if (!auth) return 'Guest';
   const provider = auth.token.firebase?.sign_in_provider;
   if (provider === 'google.com') return 'Google';
   if (provider === 'apple.com') return 'Apple';
   if (provider === 'anonymous') return 'Guest';
-  return 'Anonymous';
+  return 'Other';
 }
 
 async function getGeoLocation(ip) {
@@ -214,7 +222,7 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
     && net.isIP(request.data.metadata.clientIp) !== 0
     ? request.data.metadata.clientIp
     : '';
-  const ip = serverIp || clientIp || 'Yerel/Gizli IP';
+  const ip = serverIp || clientIp || 'Bilinmeyen IP';
   const access = await getAccessStatus(serverIp, request.auth?.uid);
   if (!access.allowed) {
     throw new HttpsError('permission-denied', 'Bu siteye erişiminiz engellenmiştir.');
@@ -287,7 +295,12 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
   const record = {
     uid: auth?.uid || '',
     email: typeof profile.email === 'string' ? profile.email.slice(0, 320) : '',
-    displayName: typeof profile.name === 'string' ? profile.name.slice(0, 200) : '',
+    displayName: typeof profile.name === 'string'
+      ? profile.name.slice(0, 200)
+      : typeof metadata.displayName === 'string'
+        ? metadata.displayName.slice(0, 200)
+        : '',
+    phoneNumber: typeof profile.phone_number === 'string' ? profile.phone_number.slice(0, 40) : '',
     photoURL: typeof metadata.photoURL === 'string' && metadata.photoURL.startsWith('https://')
       ? metadata.photoURL.slice(0, 2000)
       : '',
@@ -295,6 +308,9 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
     ip,
     city: geoLocation.city,
     region: geoLocation.region,
+    location: [geoLocation.city, geoLocation.region, geoLocation.country]
+      .filter(Boolean)
+      .join(', ') || 'Bilinmiyor',
     postalCode: geoLocation.postalCode,
     country: geoLocation.country,
     latitude: geoLocation.latitude,
@@ -327,7 +343,7 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
     createdAt: FieldValue.serverTimestamp(),
     expiresAt
   };
-  const session = await database.collection('sessions').add(record);
+  const session = await database.collection('visits').add(record);
   return { recorded: true, sessionId: session.id, durationToken, geoStatus };
 });
 
@@ -349,8 +365,12 @@ exports.updateVisitDuration = onCall({ region: 'us-central1' }, async (request) 
     throw new HttpsError('invalid-argument', 'Geçerli onaylı oturum ve süre gereklidir.');
   }
 
-  const sessionRef = database.collection('sessions').doc(sessionId);
-  const session = await sessionRef.get();
+  let sessionRef = database.collection('visits').doc(sessionId);
+  let session = await sessionRef.get();
+  if (!session.exists) {
+    sessionRef = database.collection('sessions').doc(sessionId);
+    session = await sessionRef.get();
+  }
   if (!session.exists) {
     throw new HttpsError('permission-denied', 'Bu oturum kaydını güncelleme yetkiniz yok.');
   }

@@ -19,6 +19,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /visits/{visitId} {
+      allow get, list: if isAdminReader();
+      allow write: if false;
+    }
+
     match /loginSessions/{sessionId} {
       allow get, list: if isAdminReader();
       allow write: if false;
