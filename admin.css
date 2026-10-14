@@ -787,6 +787,205 @@ td:nth-child(2) {
   margin-top: 18px;
 }
 
+.admin-secure-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid rgba(85, 230, 193, 0.14);
+  border-radius: 999px;
+  color: rgba(188, 245, 228, 0.76);
+  background: rgba(85, 230, 193, 0.055);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 28px 0 18px;
+}
+
+.panel-heading h2 {
+  margin: 0;
+  color: rgba(246, 247, 255, 0.96);
+  font-size: clamp(20px, 3vw, 27px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+
+.panel-heading .eyebrow {
+  margin-bottom: 7px;
+}
+
+.dashboard-panel {
+  display: none;
+}
+
+.dashboard-panel.active {
+  display: block;
+  animation: card-enter 220ms ease both;
+}
+
+.dashboard-panel > .records-card + .records-card {
+  margin-top: 16px;
+}
+
+.metric-total {
+  grid-column: span 1;
+}
+
+.metric-grid > .metric-card:not(.metric-devices) {
+  min-height: 142px;
+}
+
+.provider-breakdown {
+  display: grid;
+  gap: 14px;
+  padding: 0 22px 22px;
+}
+
+.provider-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 130px) minmax(80px, 1fr) minmax(75px, auto);
+  align-items: center;
+  gap: 12px;
+  color: rgba(221, 226, 245, 0.76);
+  font-size: 11px;
+}
+
+.provider-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.provider-bar {
+  display: block;
+  min-width: 3px;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9b8cff, #4dd9c1);
+}
+
+.provider-row strong {
+  color: rgba(243, 244, 255, 0.8);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.device-metrics-grid {
+  margin: 0 0 17px;
+}
+
+.device-metrics-grid .metric-card {
+  min-height: 125px;
+}
+
+.device-metrics-grid .metric-value {
+  margin-top: 15px;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.action-button {
+  min-height: 29px;
+  padding: 6px 9px;
+  border: 1px solid rgba(180, 190, 255, 0.18);
+  border-radius: 8px;
+  color: rgba(234, 237, 250, 0.86);
+  background: rgba(255, 255, 255, 0.055);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.action-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.danger-button {
+  border-color: rgba(255, 119, 128, 0.25);
+  color: #ffb2b6;
+  background: rgba(255, 79, 91, 0.08);
+}
+
+.danger-button:hover:not(:disabled) {
+  background: rgba(255, 79, 91, 0.16);
+}
+
+.unban-button {
+  border-color: rgba(85, 230, 193, 0.23);
+  color: #99f2de;
+  background: rgba(85, 230, 193, 0.07);
+}
+
+.unban-button:hover:not(:disabled) {
+  background: rgba(85, 230, 193, 0.14);
+}
+
+.admin-login-notice {
+  max-width: 680px;
+}
+
+.sign-out-link {
+  width: 100%;
+  justify-content: flex-start;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sign-out-link:hover {
+  border-color: rgba(255, 119, 128, 0.18);
+  color: #ffb2b6;
+  background: rgba(255, 79, 91, 0.08);
+}
+
+.admin-status {
+  min-height: 20px;
+}
+
+.admin-content .table-scroll {
+  max-height: min(52vh, 520px);
+}
+
+.admin-content table {
+  min-width: 560px;
+}
+
+.admin-content th,
+.admin-content td {
+  padding: 11px 13px;
+}
+
+.admin-content td:nth-child(2) {
+  max-width: 220px;
+}
+
+.admin-login-notice + .admin-login {
+  margin-top: 14px;
+}
+
 @media (max-width: 900px) {
   .admin-page {
     padding: 20px;
@@ -906,6 +1105,7 @@ td:nth-child(2) {
   }
 
   .admin-sidebar {
+    flex-wrap: wrap;
     gap: 6px;
     padding: 9px 8px;
   }
@@ -922,6 +1122,17 @@ td:nth-child(2) {
     font-size: 9px;
   }
 
+  .sidebar-nav {
+    display: grid;
+    flex: 1 1 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sidebar-nav .sidebar-link {
+    justify-content: flex-start;
+    white-space: normal;
+  }
+
   .sidebar-link svg {
     width: 13px;
     height: 13px;
@@ -935,6 +1146,12 @@ td:nth-child(2) {
   .admin-brand {
     gap: 8px;
     font-size: 9px;
+  }
+
+  .admin-secure-badge {
+    gap: 5px;
+    padding: 7px 8px;
+    font-size: 8px;
   }
 
   .admin-brand-mark {
@@ -1009,6 +1226,21 @@ td:nth-child(2) {
     flex-direction: column;
     gap: 14px;
     padding: 17px 14px;
+  }
+
+  .provider-breakdown {
+    gap: 12px;
+    padding: 0 15px 17px;
+  }
+
+  .provider-row {
+    grid-template-columns: 75px minmax(55px, 1fr) 70px;
+    gap: 8px;
+    font-size: 9px;
+  }
+
+  .panel-heading {
+    margin-top: 22px;
   }
 
   .search-box {

@@ -1,5 +1,10 @@
-import { adminEmail, firebaseAuth, firebaseDatabase } from './firebase-config.js?v=20261013-3';
-import { privacyNoticeVersion, recordUserSession } from './session-records.js?v=20261013-3';
+import {
+  adminEmail,
+  firebaseAuth,
+  firebaseDatabase,
+  firebaseFunctions
+} from './firebase-config.js?v=20261013-4';
+import { recordUserSession } from './session-records.js?v=20261013-4';
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -10,64 +15,452 @@ import {
   collection,
   onSnapshot
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
+import { httpsCallable } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-functions.js';
 
 const status = document.getElementById('admin-status');
 const content = document.getElementById('admin-content');
 const loginButton = document.getElementById('admin-google-login');
 const loginConsent = document.getElementById('admin-login-consent');
 const consentCheckbox = document.getElementById('admin-privacy-consent');
+const signOutButton = document.getElementById('admin-sign-out');
 const sidebarAvatar = document.getElementById('sidebar-avatar');
 const sidebarProfileName = document.getElementById('sidebar-profile-name');
 const sidebarProfileEmail = document.getElementById('sidebar-profile-email');
-const sidebarNavigationLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
-const rows = document.getElementById('session-rows');
-const searchInput = document.getElementById('session-search');
-const searchResultCount = document.getElementById('search-result-count');
+const navigationLinks = document.querySelectorAll('.sidebar-link[data-panel]');
+const panels = document.querySelectorAll('.dashboard-panel');
 const totalMetric = document.getElementById('metric-total');
 const activeMetric = document.getElementById('metric-active');
-const deviceMetrics = {
+const overviewDeviceMetrics = {
   Mobile: document.getElementById('device-mobile'),
   Desktop: document.getElementById('device-desktop'),
   Tablet: document.getElementById('device-tablet')
 };
-const provider = new GoogleAuthProvider();
-let loginFlowActive = false;
-let auditWarning = '';
-let sessionRecords = [];
-let sessionUnsubscribe = null;
+const deviceMetrics = {
+  Mobile: [document.getElementById('device-count-mobile'), document.getElementById('device-percent-mobile')],
+  Desktop: [document.getElementById('device-count-desktop'), document.getElementById('device-percent-desktop')],
+  Tablet: [document.getElementById('device-count-tablet'), document.getElementById('device-percent-tablet')]
+};
+const recordRows = {
+  recent: document.getElementById('recent-rows'),
+  ip: document.getElementById('ip-rows'),
+  devices: document.getElementById('device-rows'),
+  users: document.getElementById('user-rows'),
+  bannedIps: document.getElementById('banned-ip-rows'),
+  bannedUsers: document.getElementById('banned-user-rows')
+};
+const ipSearch = document.getElementById('ip-search');
+const userSearch = document.getElementById('user-search');
+const providerBreakdown = document.getElementById('provider-breakdown');
+const googleProvider = new GoogleAuthProvider();
+const setUserBan = httpsCallable(firebaseFunctions, 'setUserBan', { timeout: 15000 });
+const setIpBan = httpsCallable(firebaseFunctions, 'setIpBan', { timeout: 15000 });
+
+let currentUser = null;
+let sessions = [];
+let bannedUsers = new Map();
+let bannedIps = new Map();
+let subscriptions = [];
 let authGeneration = 0;
+let authFlowActive = false;
+let adminVisitLogged = false;
 let authResolved = false;
 let authTimeoutId;
-let latestSessions = [];
+const busyActions = new Set();
 
 function withTimeout(promise, timeoutMs, message) {
   let timeoutId;
   const timeout = new Promise((resolve, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
   });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
-function updateSidebarProfile(user) {
+function stopListeners() {
+  subscriptions.forEach((unsubscribe) => unsubscribe());
+  subscriptions = [];
+  sessions = [];
+  bannedUsers = new Map();
+  bannedIps = new Map();
+}
+
+function getDate(value) {
+  if (value && typeof value.toDate === 'function') {
+    return value.toDate();
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  return null;
+}
+
+function sessionDate(record) {
+  return getDate(record.createdAt);
+}
+
+function formatTimestamp(value) {
+  const date = getDate(value);
+  return date
+    ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'medium' }).format(date)
+    : '—';
+}
+
+function formatUser(record) {
+  return record.displayName || record.email || record.uid || 'Anonim ziyaretçi';
+}
+
+function getAuthMethod(record) {
+  return record.authMethod || (record.uid ? 'Google' : 'Anonymous');
+}
+
+function addCell(row, value, className = '') {
+  const cell = document.createElement('td');
+  if (className) cell.className = className;
+  cell.textContent = value === null || value === undefined || value === '' ? '—' : String(value);
+  row.appendChild(cell);
+  return cell;
+}
+
+function showEmpty(rowContainer, message, columnCount) {
+  const row = document.createElement('tr');
+  const cell = addCell(row, message, 'empty-row');
+  cell.colSpan = columnCount;
+  rowContainer.replaceChildren(row);
+}
+
+function createActionButton(label, callback, className = 'action-button') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = label;
+  button.addEventListener('click', callback);
+  return button;
+}
+
+function renderRecentSessions() {
+  const recent = sessions.slice(0, 20);
+  if (!recent.length) {
+    showEmpty(recordRows.recent, 'Henüz ziyaret kaydı bulunmuyor.', 4);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const record of recent) {
+    const row = document.createElement('tr');
+    addCell(row, formatUser(record));
+    addCell(row, getAuthMethod(record));
+    addCell(row, formatTimestamp(record.createdAt));
+    addCell(row, record.deviceType || 'Bilinmiyor');
+    fragment.appendChild(row);
+  }
+  recordRows.recent.replaceChildren(fragment);
+}
+
+function renderProviderBreakdown() {
+  const counts = new Map();
+  for (const record of sessions) {
+    const method = getAuthMethod(record);
+    counts.set(method, (counts.get(method) || 0) + 1);
+  }
+  const total = sessions.length;
+  if (!total) {
+    providerBreakdown.textContent = 'Henüz gösterilecek kayıt bulunmuyor.';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const [method, count] of [...counts.entries()].sort((left, right) => right[1] - left[1])) {
+    const item = document.createElement('div');
+    item.className = 'provider-row';
+    const label = document.createElement('span');
+    label.className = 'provider-label';
+    label.textContent = method;
+    const track = document.createElement('span');
+    track.className = 'provider-track';
+    const bar = document.createElement('span');
+    bar.className = 'provider-bar';
+    bar.style.width = `${Math.round((count / total) * 100)}%`;
+    track.appendChild(bar);
+    const value = document.createElement('strong');
+    value.textContent = `${count.toLocaleString('tr-TR')} (${Math.round((count / total) * 100)}%)`;
+    item.append(label, track, value);
+    fragment.appendChild(item);
+  }
+  providerBreakdown.replaceChildren(fragment);
+}
+
+function renderOverview() {
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const activeVisitors = new Set();
+  const devices = { Mobile: 0, Desktop: 0, Tablet: 0 };
+  for (const record of sessions) {
+    const date = sessionDate(record);
+    if (date && date.getTime() >= cutoff) {
+      activeVisitors.add(record.uid || record.ip || record.id);
+      if (Object.hasOwn(devices, record.deviceType)) {
+        devices[record.deviceType] += 1;
+      }
+    }
+  }
+  totalMetric.textContent = sessions.length.toLocaleString('tr-TR');
+  activeMetric.textContent = activeVisitors.size.toLocaleString('tr-TR');
+  for (const [device, element] of Object.entries(overviewDeviceMetrics)) {
+    element.textContent = devices[device].toLocaleString('tr-TR');
+  }
+  renderProviderBreakdown();
+  renderRecentSessions();
+}
+
+function renderIpRows() {
+  const term = ipSearch.value.trim().toLocaleLowerCase('tr-TR');
+  const filtered = sessions.filter((record) => [
+    record.ip,
+    record.city,
+    record.country,
+    record.uid,
+    record.email
+  ].some((value) => typeof value === 'string' && value.toLocaleLowerCase('tr-TR').includes(term)));
+  if (!filtered.length) {
+    showEmpty(recordRows.ip, term ? 'Aramanla eşleşen IP kaydı bulunamadı.' : 'Henüz IP kaydı bulunmuyor.', 5);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const record of filtered) {
+    const row = document.createElement('tr');
+    addCell(row, record.ip);
+    addCell(row, [record.city, record.country].filter(Boolean).join(', ') || 'Konum alınamadı');
+    addCell(row, formatUser(record));
+    addCell(row, formatTimestamp(record.createdAt));
+    const actionCell = document.createElement('td');
+    const ipIsBanned = bannedIps.has(record.ip);
+    const button = createActionButton(
+      ipIsBanned ? 'IP banını kaldır' : 'IP banla',
+      () => void changeIpBan(record.ip, !ipIsBanned),
+      ipIsBanned ? 'action-button unban-button' : 'action-button danger-button'
+    );
+    button.disabled = !record.ip || busyActions.has(`ip:${record.ip}`);
+    actionCell.appendChild(button);
+    row.appendChild(actionCell);
+    fragment.appendChild(row);
+  }
+  recordRows.ip.replaceChildren(fragment);
+}
+
+function renderBannedIps() {
+  const records = [...bannedIps.values()].sort((left, right) => (
+    (getDate(right.createdAt)?.getTime() || 0) - (getDate(left.createdAt)?.getTime() || 0)
+  ));
+  if (!records.length) {
+    showEmpty(recordRows.bannedIps, 'Engellenen IP adresi bulunmuyor.', 3);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const record of records) {
+    const row = document.createElement('tr');
+    addCell(row, record.ip);
+    addCell(row, formatTimestamp(record.createdAt));
+    const cell = document.createElement('td');
+    cell.appendChild(createActionButton(
+      'Banı kaldır',
+      () => void changeIpBan(record.ip, false),
+      'action-button unban-button'
+    ));
+    row.appendChild(cell);
+    fragment.appendChild(row);
+  }
+  recordRows.bannedIps.replaceChildren(fragment);
+}
+
+function renderDeviceRows() {
+  const groups = new Map();
+  const counts = { Mobile: 0, Desktop: 0, Tablet: 0 };
+  for (const record of sessions) {
+    const device = record.deviceType || 'Bilinmiyor';
+    if (Object.hasOwn(counts, device)) counts[device] += 1;
+    const browser = record.browser || 'Bilinmiyor';
+    const operatingSystem = record.operatingSystem || 'Bilinmiyor';
+    const key = `${browser}\u0000${operatingSystem}\u0000${device}`;
+    const group = groups.get(key);
+    if (group) {
+      group.count += 1;
+      if ((sessionDate(record)?.getTime() || 0) > (sessionDate(group.latest)?.getTime() || 0)) {
+        group.latest = record;
+      }
+    } else {
+      groups.set(key, { count: 1, latest: record });
+    }
+  }
+  for (const [device, [countElement, percentElement]] of Object.entries(deviceMetrics)) {
+    countElement.textContent = counts[device].toLocaleString('tr-TR');
+    percentElement.textContent = sessions.length
+      ? `Ziyaretlerin %${Math.round((counts[device] / sessions.length) * 100)}'i`
+      : 'Ziyaretlerin %0\'ı';
+  }
+  if (!groups.size) {
+    showEmpty(recordRows.devices, 'Henüz cihaz kaydı bulunmuyor.', 5);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  const sorted = [...groups.values()].sort((left, right) => right.count - left.count);
+  for (const group of sorted) {
+    const record = group.latest;
+    const row = document.createElement('tr');
+    addCell(row, record.browser || 'Bilinmiyor');
+    addCell(row, record.operatingSystem || 'Bilinmiyor');
+    addCell(row, record.deviceType || 'Bilinmiyor');
+    const percent = Math.round((group.count / sessions.length) * 100);
+    addCell(row, `${group.count.toLocaleString('tr-TR')} (%${percent})`);
+    addCell(row, formatTimestamp(record.createdAt));
+    fragment.appendChild(row);
+  }
+  recordRows.devices.replaceChildren(fragment);
+}
+
+function renderUserRows() {
+  const term = userSearch.value.trim().toLocaleLowerCase('tr-TR');
+  const filtered = sessions.filter((record) => [
+    record.displayName,
+    record.email,
+    record.uid,
+    getAuthMethod(record),
+    record.ip
+  ].some((value) => typeof value === 'string' && value.toLocaleLowerCase('tr-TR').includes(term)));
+  if (!filtered.length) {
+    showEmpty(recordRows.users, term ? 'Aramanla eşleşen kayıt bulunamadı.' : 'Henüz kullanıcı/oturum kaydı bulunmuyor.', 5);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const record of filtered) {
+    const row = document.createElement('tr');
+    addCell(row, `${formatUser(record)}${record.email && record.displayName ? ` · ${record.email}` : ''}`);
+    addCell(row, getAuthMethod(record));
+    addCell(row, record.uid);
+    addCell(row, formatTimestamp(record.createdAt));
+    const actions = document.createElement('td');
+    const actionGroup = document.createElement('div');
+    actionGroup.className = 'row-actions';
+    const userIsBanned = bannedUsers.get(record.uid)?.banned === true;
+    if (record.uid) {
+      const banButton = createActionButton(
+        userIsBanned ? 'Banı kaldır' : 'Kullanıcıyı banla',
+        () => void changeUserBan(record.uid, !userIsBanned),
+        userIsBanned ? 'action-button unban-button' : 'action-button danger-button'
+      );
+      banButton.disabled = record.uid === currentUser?.uid || busyActions.has(`user:${record.uid}`);
+      actionGroup.appendChild(banButton);
+    }
+    if (record.ip) {
+      const ipIsBanned = bannedIps.has(record.ip);
+      actionGroup.appendChild(createActionButton(
+        ipIsBanned ? 'IP banını kaldır' : 'IP banla',
+        () => void changeIpBan(record.ip, !ipIsBanned),
+        ipIsBanned ? 'action-button unban-button' : 'action-button danger-button'
+      ));
+    }
+    actions.appendChild(actionGroup);
+    row.appendChild(actions);
+    fragment.appendChild(row);
+  }
+  recordRows.users.replaceChildren(fragment);
+}
+
+function renderBannedUsers() {
+  const records = [...bannedUsers.entries()]
+    .filter(([, record]) => record.banned === true)
+    .sort((left, right) => (
+      (getDate(right[1].bannedAt)?.getTime() || 0) - (getDate(left[1].bannedAt)?.getTime() || 0)
+    ));
+  if (!records.length) {
+    showEmpty(recordRows.bannedUsers, 'Engellenen kullanıcı bulunmuyor.', 4);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const [uid, record] of records) {
+    const row = document.createElement('tr');
+    addCell(row, record.displayName || record.email || uid);
+    addCell(row, uid);
+    addCell(row, formatTimestamp(record.bannedAt));
+    const cell = document.createElement('td');
+    const button = createActionButton(
+      'Banı kaldır',
+      () => void changeUserBan(uid, false),
+      'action-button unban-button'
+    );
+    button.disabled = busyActions.has(`user:${uid}`);
+    cell.appendChild(button);
+    row.appendChild(cell);
+    fragment.appendChild(row);
+  }
+  recordRows.bannedUsers.replaceChildren(fragment);
+}
+
+function renderAll() {
+  renderOverview();
+  renderIpRows();
+  renderBannedIps();
+  renderDeviceRows();
+  renderUserRows();
+  renderBannedUsers();
+}
+
+async function changeUserBan(uid, banned) {
+  const actionKey = `user:${uid}`;
+  if (busyActions.has(actionKey)) return;
+  if (banned && !window.confirm('Bu kullanıcıyı engellemek ve mevcut oturumunu kapatmak istiyor musun?')) return;
+  busyActions.add(actionKey);
+  status.textContent = banned ? 'Kullanıcı engelleniyor...' : 'Kullanıcı engeli kaldırılıyor...';
+  renderAll();
+  try {
+    await setUserBan({ uid, banned });
+    status.textContent = banned
+      ? 'Kullanıcı engellendi; aktif oturumu kapatılacak.'
+      : 'Kullanıcı engeli kaldırıldı.';
+  } catch (error) {
+    console.error('Kullanıcı ban işlemi başarısız:', error);
+    status.textContent = `Kullanıcı ban işlemi başarısız (${error.code || 'beklenmeyen hata'}). Yönetici yetkisini ve Functions dağıtımını kontrol et.`;
+  } finally {
+    busyActions.delete(actionKey);
+    renderAll();
+  }
+}
+
+async function changeIpBan(ip, banned) {
+  if (typeof ip !== 'string' || !ip) return;
+  const actionKey = `ip:${ip}`;
+  if (busyActions.has(actionKey)) return;
+  if (banned && !window.confirm(`${ip} IP adresini engellemek istiyor musun? Bu ağdan gelen ziyaretçiler de engellenebilir.`)) return;
+  busyActions.add(actionKey);
+  status.textContent = banned ? 'IP adresi engelleniyor...' : 'IP adresi engeli kaldırılıyor...';
+  renderAll();
+  try {
+    await setIpBan({ ip, banned });
+    status.textContent = banned
+      ? 'IP engellendi. Ziyaretçiler sonraki erişim denetiminde engellenir.'
+      : 'IP engeli kaldırıldı.';
+  } catch (error) {
+    console.error('IP ban işlemi başarısız:', error);
+    status.textContent = `IP ban işlemi başarısız (${error.code || 'beklenmeyen hata'}). Yönetici yetkisini ve Functions dağıtımını kontrol et.`;
+  } finally {
+    busyActions.delete(actionKey);
+    renderAll();
+  }
+}
+
+function updateProfile(user) {
   const displayName = user?.displayName || 'Yönetici';
   const email = user?.email || 'Yönetici hesabı';
   const initial = displayName.trim().charAt(0).toLocaleUpperCase('tr-TR') || 'M';
   sidebarProfileName.textContent = displayName;
   sidebarProfileEmail.textContent = email;
   sidebarAvatar.replaceChildren(document.createTextNode(initial));
-
-  if (!user?.photoURL) {
-    return;
-  }
+  if (!user?.photoURL) return;
 
   try {
-    const photoURL = new URL(user.photoURL);
-    if (photoURL.protocol !== 'https:') {
-      return;
-    }
-
+    const imageUrl = new URL(user.photoURL);
+    if (imageUrl.protocol !== 'https:') return;
     const image = document.createElement('img');
-    image.src = photoURL.href;
+    image.src = imageUrl.href;
     image.alt = '';
     image.referrerPolicy = 'no-referrer';
     image.addEventListener('error', () => {
@@ -75,27 +468,9 @@ function updateSidebarProfile(user) {
       sidebarAvatar.textContent = initial;
     }, { once: true });
     sidebarAvatar.replaceChildren(image);
-  } catch {
-    sidebarAvatar.textContent = initial;
+  } catch (error) {
+    console.warn('Yönetici profil fotoğrafı URL değeri geçersiz:', error);
   }
-}
-
-function stopSessionListener() {
-  if (sessionUnsubscribe) {
-    sessionUnsubscribe();
-    sessionUnsubscribe = null;
-  }
-  latestSessions = [];
-}
-
-function showError(error) {
-  console.error('Admin authentication or Firestore listener failed:', error);
-  stopSessionListener();
-  status.textContent = 'Yetki veya oturum kayıtları doğrulanamadı. Google hesabını, yayımlanmış Firestore kurallarını ve bağlantıyı kontrol et.';
-  content.classList.add('hidden');
-  loginConsent.classList.remove('hidden');
-  loginButton.classList.remove('hidden');
-  loginButton.disabled = !consentCheckbox.checked;
 }
 
 function isAdminUser(user, claims) {
@@ -110,359 +485,189 @@ function isAdminUser(user, claims) {
 async function verifyAdminUser(user) {
   await user.reload();
   const refreshedUser = firebaseAuth.currentUser;
-  if (!refreshedUser || refreshedUser.uid !== user.uid) {
-    return null;
-  }
-
+  if (!refreshedUser || refreshedUser.uid !== user.uid) return null;
   const tokenResult = await refreshedUser.getIdTokenResult(true);
   return isAdminUser(refreshedUser, tokenResult.claims) ? refreshedUser : null;
 }
 
-function getSessionDate(data) {
-  const value = data.createdAt || data.loggedAt;
-  if (value && typeof value.toDate === 'function') {
-    return value.toDate();
-  }
-  if (value instanceof Date) {
-    return value;
-  }
-  return null;
+function showLogin(message) {
+  stopListeners();
+  currentUser = null;
+  content.classList.add('hidden');
+  loginConsent.classList.remove('hidden');
+  loginButton.classList.remove('hidden');
+  signOutButton.classList.add('hidden');
+  loginButton.disabled = !consentCheckbox.checked || authFlowActive;
+  if (message) status.textContent = message;
 }
 
-function formatTimestamp(value) {
-  const date = getSessionDate({ createdAt: value });
-  return date
-    ? new Intl.DateTimeFormat('tr-TR', {
-      dateStyle: 'medium',
-      timeStyle: 'medium'
-    }).format(date)
-    : '—';
+function showError(error) {
+  console.error('Yönetici doğrulaması veya kayıt akışı başarısız:', error);
+  if (currentUser) {
+    stopListeners();
+    status.textContent = 'Yetki veya kayıtlar doğrulanamadı. Google hesabını, Firestore kurallarını ve Firebase Functions dağıtımını kontrol et; yeniden deneyebilir veya oturumu kapatabilirsin.';
+    content.classList.add('hidden');
+    loginConsent.classList.add('hidden');
+    loginButton.classList.add('hidden');
+    signOutButton.classList.remove('hidden');
+    return;
+  }
+  showLogin('Yetki veya kayıtlar doğrulanamadı. Google hesabını, Firestore kurallarını ve Firebase Functions dağıtımını kontrol et.');
 }
 
-function addCell(row, value, className = '') {
-  const cell = document.createElement('td');
-  if (className) {
-    cell.className = className;
-  }
-  cell.textContent = value || '—';
-  row.appendChild(cell);
-  return cell;
-}
-
-function renderUserCell(row, data) {
-  const cell = document.createElement('td');
-  const user = document.createElement('div');
-  user.className = 'user-cell';
-  const avatar = document.createElement('span');
-  avatar.className = 'user-avatar';
-  const displayName = typeof data.displayName === 'string' ? data.displayName : '';
-  const photoURL = typeof data.photoURL === 'string' ? data.photoURL : '';
-  const initials = displayName.trim().charAt(0).toLocaleUpperCase('tr-TR')
-    || (typeof data.email === 'string' ? data.email.charAt(0).toLocaleUpperCase('tr-TR') : '?');
-  avatar.textContent = initials;
-
-  if (photoURL) {
-    try {
-      const imageURL = new URL(photoURL);
-      if (imageURL.protocol === 'https:') {
-        const image = document.createElement('img');
-        image.src = imageURL.href;
-        image.alt = '';
-        image.loading = 'lazy';
-        image.referrerPolicy = 'no-referrer';
-        image.addEventListener('error', () => {
-          image.remove();
-          avatar.textContent = initials;
-        }, { once: true });
-        avatar.replaceChildren(image);
-      }
-    } catch {
-      avatar.textContent = initials;
-    }
-  }
-
-  const details = document.createElement('span');
-  details.className = 'user-details';
-  const name = document.createElement('span');
-  name.className = 'user-name';
-  name.textContent = displayName || 'İsimsiz kullanıcı';
-  const email = document.createElement('span');
-  email.className = 'user-email';
-  email.textContent = typeof data.email === 'string' ? data.email : '—';
-  details.append(name, email);
-  user.append(avatar, details);
-  cell.appendChild(user);
-  row.appendChild(cell);
-}
-
-function renderRow(data) {
-  const row = document.createElement('tr');
-  renderUserCell(row, data);
-  addCell(row, data.uid);
-  addCell(row, formatTimestamp(data.createdAt || data.loggedAt));
-
-  const deviceCell = document.createElement('td');
-  const deviceName = typeof data.deviceType === 'string' ? data.deviceType : 'Bilinmiyor';
-  const deviceTag = document.createElement('span');
-  deviceTag.className = 'device-tag';
-  deviceTag.dataset.device = deviceName;
-  deviceTag.textContent = deviceName;
-  deviceCell.appendChild(deviceTag);
-  if (Number.isInteger(data.batteryPercent) || typeof data.networkType === 'string') {
-    const metadata = document.createElement('span');
-    metadata.className = 'session-meta';
-    const parts = [];
-    if (typeof data.networkType === 'string' && data.networkType) {
-      parts.push(data.networkType);
-    }
-    if (Number.isInteger(data.batteryPercent) && data.batteryPercent >= 0 && data.batteryPercent <= 100) {
-      parts.push(`Pil %${data.batteryPercent}`);
-    }
-    metadata.textContent = parts.join(' · ');
-    deviceCell.appendChild(metadata);
-  }
-  row.appendChild(deviceCell);
-
-  const userAgent = addCell(row, data.userAgent, 'browser-cell');
-  if (typeof data.userAgent === 'string') {
-    userAgent.title = data.userAgent;
-  }
-  rows.appendChild(row);
-}
-
-function renderSearchResults() {
-  const searchTerm = searchInput.value.trim().toLocaleLowerCase('tr-TR');
-  const filteredRecords = searchTerm
-    ? sessionRecords.filter((record) => record.searchText.includes(searchTerm))
-    : sessionRecords;
-
-  rows.replaceChildren();
-  for (const record of filteredRecords) {
-    renderRow(record.data);
-  }
-
-  if (filteredRecords.length === 0) {
-    const row = document.createElement('tr');
-    const cell = document.createElement('td');
-    cell.className = 'empty-row';
-    cell.colSpan = 5;
-    cell.textContent = searchTerm ? 'Aramanla eşleşen kayıt bulunamadı.' : 'Henüz oturum kaydı bulunmuyor.';
-    row.appendChild(cell);
-    rows.appendChild(row);
-  }
-
-  searchResultCount.textContent = searchTerm
-    ? `${filteredRecords.length} / ${sessionRecords.length} kayıt gösteriliyor`
-    : `${sessionRecords.length} kayıt gösteriliyor`;
-}
-
-function renderMetrics(sessions) {
-  const activeUsers = new Set();
-  const deviceCounts = { Mobile: 0, Desktop: 0, Tablet: 0 };
-  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-  for (const data of sessions) {
-    const sessionDate = getSessionDate(data);
-    if (!sessionDate || sessionDate.getTime() < cutoff) {
-      continue;
-    }
-    if (typeof data.uid === 'string' && data.uid.length > 0) {
-      activeUsers.add(data.uid);
-    }
-    if (Object.hasOwn(deviceCounts, data.deviceType)) {
-      deviceCounts[data.deviceType] += 1;
-    }
-  }
-
-  totalMetric.textContent = sessions.length.toLocaleString('tr-TR');
-  activeMetric.textContent = activeUsers.size.toLocaleString('tr-TR');
-  for (const [device, element] of Object.entries(deviceMetrics)) {
-    element.textContent = deviceCounts[device].toLocaleString('tr-TR');
-  }
-}
-
-function updateLiveSessions(snapshot) {
-  latestSessions = snapshot.docs.map((document) => document.data({
-    serverTimestamps: 'estimate'
-  }));
-  latestSessions.sort((left, right) => (
-    (getSessionDate(right)?.getTime() || 0) - (getSessionDate(left)?.getTime() || 0)
-  ));
-
-  renderMetrics(latestSessions);
-  sessionRecords = latestSessions.slice(0, 100).map((data) => {
-    const searchText = [
-      data.displayName,
-      data.email,
-      data.uid,
-      formatTimestamp(data.createdAt || data.loggedAt),
-      data.deviceType,
-      data.userAgent,
-      data.networkType,
-      Number.isInteger(data.batteryPercent) ? `${data.batteryPercent}%` : ''
-    ]
-      .filter((value) => typeof value === 'string')
-      .join(' ')
-      .toLocaleLowerCase('tr-TR');
-    return { data, searchText };
-  });
-  renderSearchResults();
-
-  const resultMessage = latestSessions.length === 0
-    ? 'Yönetici hesabı doğrulandı. Henüz oturum kaydı bulunmuyor.'
-    : `${sessionRecords.length} son kayıt gösteriliyor; veriler canlı güncelleniyor.`;
-  status.textContent = auditWarning
-    ? `${resultMessage} ${auditWarning}`
-    : resultMessage;
-  content.classList.remove('hidden');
-  loginButton.classList.add('hidden');
-}
-
-function startSessionListener() {
-  stopSessionListener();
-  status.textContent = 'Oturum kayıtları canlı olarak yükleniyor...';
+function startListeners() {
+  stopListeners();
+  status.textContent = 'Ziyaret, IP ve kullanıcı kayıtları canlı yükleniyor...';
   try {
-    sessionUnsubscribe = onSnapshot(
-      collection(firebaseDatabase, 'sessions'),
-      updateLiveSessions,
-      showError
-    );
+    subscriptions.push(onSnapshot(collection(firebaseDatabase, 'sessions'), (snapshot) => {
+      sessions = snapshot.docs.map((document) => ({
+        id: document.id,
+        ...document.data({ serverTimestamps: 'estimate' })
+      }));
+      sessions.sort((left, right) => (
+        (sessionDate(right)?.getTime() || 0) - (sessionDate(left)?.getTime() || 0)
+      ));
+      renderAll();
+      status.textContent = `${sessions.length.toLocaleString('tr-TR')} oturum kaydı canlı olarak izleniyor.`;
+      content.classList.remove('hidden');
+      loginConsent.classList.add('hidden');
+      loginButton.classList.add('hidden');
+      signOutButton.classList.remove('hidden');
+    }, showError));
+
+    subscriptions.push(onSnapshot(collection(firebaseDatabase, 'users'), (snapshot) => {
+      bannedUsers = new Map(snapshot.docs.map((document) => [
+        document.id,
+        document.data({ serverTimestamps: 'estimate' })
+      ]));
+      renderAll();
+    }, showError));
+
+    subscriptions.push(onSnapshot(collection(firebaseDatabase, 'bannedIPs'), (snapshot) => {
+      bannedIps = new Map(snapshot.docs.map((document) => {
+        const data = document.data({ serverTimestamps: 'estimate' });
+        return [data.ip, data];
+      }).filter(([ip]) => typeof ip === 'string' && ip.length > 0));
+      renderAll();
+    }, showError));
   } catch (error) {
     showError(error);
   }
 }
 
-function showUnauthorized() {
-  stopSessionListener();
-  status.textContent = `Yönetici erişimi yalnızca ${adminEmail} adresine sahip doğrulanmış Google hesabına açıktır.`;
-  content.classList.add('hidden');
-  loginConsent.classList.remove('hidden');
-  loginButton.classList.remove('hidden');
-  loginButton.disabled = !consentCheckbox.checked;
-}
-
 async function handleAuthStateChanged(user, generation) {
-  updateSidebarProfile(user);
-  if (loginFlowActive || generation !== authGeneration) {
-    return;
-  }
-
-  stopSessionListener();
+  updateProfile(user);
+  if (authFlowActive || generation !== authGeneration) return;
+  stopListeners();
   if (!user) {
-    content.classList.add('hidden');
-    status.textContent = 'Yönetici hesabıyla devam etmek için Google ile giriş yap.';
-    loginConsent.classList.remove('hidden');
-    loginButton.classList.remove('hidden');
-    loginButton.disabled = !consentCheckbox.checked;
+    showLogin('Yönetici hesabıyla devam etmek için Google ile giriş yap.');
     return;
   }
 
-  status.textContent = 'Yönetici hesabı güvenli şekilde doğrulanıyor...';
+  status.textContent = 'Yönetici hesabı doğrulanıyor...';
   try {
     const adminUser = await withTimeout(
       verifyAdminUser(user),
       12000,
       'Yönetici hesabı 12 saniye içinde doğrulanamadı.'
     );
-    if (generation !== authGeneration) {
-      return;
-    }
+    if (generation !== authGeneration) return;
     if (!adminUser) {
       try {
         await signOut(firebaseAuth);
       } catch (error) {
-        console.error('Could not sign out a non-admin user:', error);
+        console.error('Yetkisiz yönetici oturumu kapatılamadı:', error);
       }
-      showUnauthorized();
+      showLogin(`Yönetici erişimi yalnızca ${adminEmail} adresine sahip doğrulanmış Google hesabına açıktır.`);
       return;
     }
 
+    currentUser = adminUser;
     loginConsent.classList.add('hidden');
     loginButton.classList.add('hidden');
-    startSessionListener();
-  } catch (error) {
-    if (generation === authGeneration) {
-      showError(error);
+    signOutButton.classList.remove('hidden');
+    startListeners();
+    if (consentCheckbox.checked && !adminVisitLogged) {
+      await recordAdminVisit();
     }
+  } catch (error) {
+    if (generation === authGeneration) showError(error);
   }
 }
 
-searchInput.addEventListener('input', renderSearchResults);
+async function recordAdminVisit() {
+  if (!consentCheckbox.checked || adminVisitLogged) return;
+  adminVisitLogged = true;
+  try {
+    await recordUserSession();
+  } catch (error) {
+    adminVisitLogged = false;
+    console.error('Yönetici oturumu kaydedilemedi:', error);
+    status.textContent = 'Yönetici girişi başarılı; ancak onaylı oturum kaydı oluşturulamadı.';
+  }
+}
 
-sidebarNavigationLinks.forEach((link) => {
+loginButton.addEventListener('click', async () => {
+  if (!consentCheckbox.checked || authFlowActive) return;
+  authFlowActive = true;
+  loginButton.disabled = true;
+  status.textContent = 'Google yönetici hesabı doğrulanıyor...';
+  try {
+    const credential = await signInWithPopup(firebaseAuth, googleProvider);
+    const adminUser = await verifyAdminUser(credential.user);
+    if (!adminUser) {
+      await signOut(firebaseAuth);
+      showLogin(`Yönetici erişimi yalnızca ${adminEmail} adresine sahip doğrulanmış Google hesabına açıktır.`);
+      return;
+    }
+    currentUser = adminUser;
+    await recordAdminVisit();
+  } catch (error) {
+    console.error('Yönetici girişi başarısız:', error);
+    status.textContent = error.code === 'auth/unauthorized-domain'
+      ? 'Bu alan adı Firebase Authentication yetkili alan adlarında değil.'
+      : `Yönetici girişi tamamlanamadı (${error.code || 'beklenmeyen hata'}). Google sağlayıcı ayarlarını kontrol et.`;
+  } finally {
+    authFlowActive = false;
+    loginButton.disabled = !consentCheckbox.checked;
+    if (currentUser) startListeners();
+  }
+});
+
+consentCheckbox.addEventListener('change', () => {
+  loginButton.disabled = !consentCheckbox.checked || authFlowActive;
+  if (consentCheckbox.checked && currentUser) {
+    void recordAdminVisit();
+  }
+});
+
+signOutButton.addEventListener('click', async () => {
+  try {
+    await signOut(firebaseAuth);
+    adminVisitLogged = false;
+  } catch (error) {
+    console.error('Yönetici oturumu kapatılamadı:', error);
+    status.textContent = 'Yönetici oturumu kapatılamadı. Tekrar dene.';
+  }
+});
+
+navigationLinks.forEach((link) => {
   link.addEventListener('click', () => {
-    sidebarNavigationLinks.forEach((navigationLink) => {
-      navigationLink.classList.remove('active');
-      navigationLink.removeAttribute('aria-current');
+    const targetId = link.dataset.panel;
+    navigationLinks.forEach((item) => {
+      item.classList.remove('active');
+      item.removeAttribute('aria-current');
     });
+    panels.forEach((panel) => panel.classList.toggle('active', panel.id === targetId));
     link.classList.add('active');
     link.setAttribute('aria-current', 'page');
   });
 });
 
-document.addEventListener('keydown', (event) => {
-  if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey
-    && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
-    event.preventDefault();
-    searchInput.focus();
-  }
-  if (event.key === 'Escape' && document.activeElement === searchInput) {
-    searchInput.value = '';
-    renderSearchResults();
-    searchInput.blur();
-  }
-});
+ipSearch.addEventListener('input', renderIpRows);
+userSearch.addEventListener('input', renderUserRows);
 
-loginButton.addEventListener('click', async (event) => {
-  event.preventDefault();
-  if (!consentCheckbox.checked || loginFlowActive) {
-    return;
-  }
-
-  loginButton.disabled = true;
-  loginFlowActive = true;
-  status.textContent = 'Google hesabı doğrulanıyor...';
-  try {
-    const credential = await signInWithPopup(firebaseAuth, provider);
-    const adminUser = await withTimeout(
-      verifyAdminUser(credential.user),
-      12000,
-      'Yönetici hesabı 12 saniye içinde doğrulanamadı.'
-    );
-    if (!adminUser) {
-      try {
-        await signOut(firebaseAuth);
-      } catch (error) {
-        console.error('Could not sign out a non-admin user:', error);
-      }
-      showUnauthorized();
-      return;
-    }
-
-    try {
-      await recordUserSession(adminUser);
-      auditWarning = '';
-    } catch (error) {
-      console.error('Admin sign-in session record could not be saved:', error);
-      auditWarning = 'Bu girişin oturum kaydı yazılamadı; Firestore kurallarını ve bağlantıyı kontrol et.';
-    }
-
-    loginConsent.classList.add('hidden');
-    loginButton.classList.add('hidden');
-    startSessionListener();
-  } catch (error) {
-    showError(error);
-  } finally {
-    loginFlowActive = false;
-    loginButton.disabled = !consentCheckbox.checked;
-  }
-});
-
-consentCheckbox.addEventListener('change', () => {
-  loginButton.disabled = !consentCheckbox.checked || loginFlowActive;
-});
-
-authTimeoutId = setTimeout(() => {
+authTimeoutId = window.setTimeout(() => {
   if (!authResolved) {
     showError(new Error('Firebase Authentication başlangıç durumu 12 saniyede yanıt vermedi.'));
   }
@@ -470,11 +675,11 @@ authTimeoutId = setTimeout(() => {
 
 onAuthStateChanged(firebaseAuth, (user) => {
   authResolved = true;
-  clearTimeout(authTimeoutId);
+  window.clearTimeout(authTimeoutId);
   const generation = ++authGeneration;
   void handleAuthStateChanged(user, generation).catch(showError);
 }, (error) => {
   authResolved = true;
-  clearTimeout(authTimeoutId);
+  window.clearTimeout(authTimeoutId);
   showError(error);
 });

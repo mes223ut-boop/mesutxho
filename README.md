@@ -1,50 +1,52 @@
 # Mesutxho Firebase kurulumu
 
-## Oturum verisi ve erişim
+## Kimlik doğrulama ve gizlilik
 
-- Google girişi, kullanıcı bilgilendirme kutusunu işaretleyene kadar etkinleşmez.
-- `script.js` ile `admin.js`, ortak `session-records.js` modülünü kullanarak yeni oturumları doğrudan Firestore `sessions` koleksiyonuna yazar. Cloud Functions uygulama akışında kullanılmaz.
-- Oturum belgesi Google kullanıcısının UID/e-posta/ad/fotoğrafını, onay sürümünü, sunucu zaman damgasını, tarayıcı/cihaz bilgisini ve tarayıcının izin verdiği pil/ağ metaverisini içerir. IP/şehir bilgisi bu istemci kayıtlarında toplanmaz.
-- `createdAt` Firestore `serverTimestamp()` ile yazılır. `expiresAt` 90 günlük TTL silme süresi içindir; istemci yazımı Firestore kurallarıyla 89-91 gün aralığında doğrulanır.
-- Kullanıcı yalnızca kendi UID'siyle, onaylı ve şemaya uyan kayıt oluşturabilir. İstemci kayıtları güncelleyemez veya silemez. Kayıtları yalnızca e-postası `mes223ut@gmail.com`, e-postası doğrulanmış ve oturumu Google sağlayıcısından gelen hesap okuyabilir. Gerçek erişim sınırı Firestore Security Rules'dur; arayüzdeki e-posta kontrolü tek başına güvenlik sağlamaz.
-- `admin.html`, `sessions` koleksiyonunu `onSnapshot` ile dinler; tablo ve özet sayıları yeni kayıtlarla canlı güncellenir. Yalnızca en yeni 100 kayıt tabloda gösterilir.
-- Firebase/Google Cloud projesinde uygun IAM yetkileri olan proje sahipleri ve yöneticileri veritabanına altyapı üzerinden de erişebilir; bu kişilerin erişimini Google Cloud IAM ile sınırlandırın.
+- Firebase Authentication'da **Google**, **Apple** ve **Anonymous** sağlayıcılarını etkinleştirin. Apple sağlayıcısı için Apple Developer bilgilerini Firebase Console'da yapılandırın; özel anahtarları depoya eklemeyin.
+- Oturum kayıtları yalnızca kullanıcı gizlilik bildirimindeki onayı verdiğinde yazılır. Onay vermeyen ziyaretçi misafir olarak siteye erişebilir ve oturum kaydı oluşturulmaz.
+- Güvenlik denetimi, içeriği göstermeden önce IP adresini Firebase Callable Function'a gönderir. Bu denetim onaydan bağımsız olarak erişim engelini uygulamak için gereklidir.
+- Onaylı kayıtlarda IP adresi, ipapi.co üzerinden yaklaşık şehir/ülke, giriş yöntemi, UID/e-posta/ad (kimlik sağlayıcısının verdiği ölçüde), cihaz türü, işletim sistemi, tarayıcı/User-Agent ve sunucu giriş zamanı saklanır. Şehir/ülke araması için IP adresi ipapi.co'ya iletilir; bu servis konumu belirleyemezse kayıt IP bilgisiyle oluşturulur ve konum durumu panelde görünür.
+- Oturum belgeleri `sessions` koleksiyonunda 90 günlük `expiresAt` TTL alanıyla tutulur. TTL silme işlemi tam zamanında çalışmayabilir. IP ve kullanıcı ban kayıtları otomatik olarak sona ermez; panelden kaldırılmalıdır.
+- Firestore güvenlik kuralları oturum, ban ve IP-ban kayıtlarına istemciden yazılmasını engeller. Ban işlemleri `functions/index.js` içindeki yönetici e-postasıyla sınırlı Callable Functions üzerinden yapılır. Admin panelindeki arayüz denetimi güvenlik sınırı değildir; asıl yetkilendirme Functions ve Firestore kurallarıdır.
+- Yönetici e-postası hem `firebase-config.js`, `firestore.rules` hem de `functions/index.js` içinde `mes223ut@gmail.com` olmalıdır.
+- Firebase proje yöneticileri veritabanına ve sunucu loglarına altyapı erişimi sağlayabilir. Erişimi Google Cloud IAM ile sınırlayın ve veri sorumlusu/yasal yükümlülükleriniz için kendi gizlilik metninizi hazırlayın. Bu açıklama hukuki danışmanlık değildir.
 
-Bu açıklama gizlilik/KVKK yükümlülüklerinin veya hukuki danışmanlığın yerine geçmez. Yayına almadan önce kendi veri sorumlusu bilgilerinizi, amaçları, yasal dayanağı ve ilgili hakları kapsayan gizlilik metninizi hazırlayın. Bu istemci tabanlı kayıt yaklaşımı IP adresi toplamaz.
+## Yayınlama
 
-## Yayına almadan önce
+1. Firebase Console'da Authentication'ı başlatın; Google, Apple ve Anonymous giriş sağlayıcılarını etkinleştirin. Geliştirme ve dağıtım alan adlarını **Authorized domains** listesine ekleyin.
+2. Firestore veritabanını oluşturun.
+3. Node.js 22 ve Firebase CLI kurulu ortamda proje kökünden Functions bağımlılıklarını yükleyin:
 
-1. Firebase Console > Authentication > Sign-in method bölümünde **Google** sağlayıcısını etkinleştirin.
-2. Firebase Console > Firestore Database bölümünden veritabanı oluşturun. Veri yerleşimi için uygun konumu seçin.
-3. Firebase Console > Authentication > Settings > Authorized domains bölümünde geliştirme ve dağıtım alan adlarınızın bulunduğunu kontrol edin.
-4. Firebase Console > Firestore Database > Rules bölümüne [firestore.rules](./firestore.rules) içeriğini yapıştırıp **Publish** seçin. Admin e-postası `firebase-config.js` ile aynı olmalıdır.
-5. 90 günlük otomatik silme için her iki koleksiyon grubunda da TTL etkinleştirin:
+   ```powershell
+   Set-Location functions
+   npm install
+   Set-Location ..
+   ```
+
+4. Firestore kurallarını, Hosting'i ve Callable Functions'ı dağıtın:
+
+   ```powershell
+   firebase deploy --project mesutxo --only firestore:rules,functions,hosting
+   ```
+
+   Cloud Functions dağıtımı için Firebase projesinde faturalandırma/Blaze planı gerekebilir.
+
+5. Firestore TTL bölümünde `sessions` koleksiyon grubu için `expiresAt` alanında TTL'yi etkinleştirin. TTL ayarı Firebase Console'da veya şu komutla yapılabilir:
 
    ```powershell
    gcloud firestore fields ttls update expiresAt --collection-group=sessions --database="(default)" --enable-ttl --project=mesutxo
-   gcloud firestore fields ttls update expiresAt --collection-group=loginSessions --database="(default)" --enable-ttl --project=mesutxo
    ```
 
-   TTL silmeleri anlık değildir; Firestore kayıtları süre dolduktan sonra arka planda siler. `loginSessions`, eski sürümün verilerini korumak için kurallarda ve TTL ayarında tutulur; admin panelinin yeni canlı akışı `sessions` koleksiyonunu kullanır.
+6. `https://mesutxo.web.app/` ve `https://mesutxo.web.app/admin.html` adreslerinde Google, Apple, misafir, onay, log, ban ve ban kaldırma akışlarını test edin.
 
-6. Hosting ve Firestore kurallarını yayımlayın:
-
-   ```powershell
-   firebase deploy --project mesutxo --only firestore:rules,hosting
-   ```
-
-7. `https://mesutxo.web.app/` ve `https://mesutxo.web.app/admin.html` adreslerini deneyin. Yöneticinin doğrulanmış Google e-postası `mes223ut@gmail.com` olmalıdır.
-
-Bu proje artık `firebase-functions` istemci SDK'sına veya Functions dağıtımına bağlı değildir. Daha önce dağıtılmış `recordSignIn` Cloud Function varsa yeni kod tarafından çağrılmaz; Firebase Console > Functions bölümünden eski işlevi, artık kullanmadığınızdan emin olduktan sonra ayrıca kaldırabilirsiniz.
-
-Google girişinde `auth/configuration-not-found` hatası alınırsa Firebase Console'da Authentication hizmetinin başlatıldığını ve Google sağlayıcısının etkin olduğunu doğrulayın. Hata sürerse web uygulamasının `apiKey`, `projectId` ve `authDomain` değerlerinin aynı Firebase projesine ait olduğunu kontrol edin.
+IP engeli sayfa açılırken ve açık sekmede 30 saniyelik aralıklarla Callable Function üzerinden kontrol edilir. Firebase Hosting bu projede statik HTML/CSS/JS sunar; bu nedenle IP engeli tarayıcı arayüzünü gizleyip uygulama erişimini durdurur ancak statik dosyaların HTTP yanıtını ağ katmanında engellemez. Statik dosya indirmesini de engellemek gerekiyorsa Hosting önüne IP denetimi uygulayan Cloud Run/proxy gibi sunucu taraflı bir katman koyun.
 
 ## Yerel önizleme
 
-ES module importları `file://` üzerinden çalışmaz. Firebase Authentication ve Firestore için localhost veya HTTPS üzerinden sunun:
+ES module importları `file://` üzerinden çalışmaz. Yerel bir HTTPS/localhost sunucusu kullanın:
 
 ```powershell
 python -m http.server 8080
 ```
 
-Yerel giriş için `localhost` Firebase Authentication yetkili alan adlarına eklenmelidir. Firestore rules yayımlanmadan oturum kayıtları okunup yazılamaz.
+`localhost` alan adını Firebase Authentication yetkili alan adlarına ekleyin. Callable Functions'ı yerelde çalıştırmak için Firebase Emulator Suite yapılandırın; canlı Firebase projesine deploy edilmemiş Functions çağrıları başarısız olur.

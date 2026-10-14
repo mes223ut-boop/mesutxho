@@ -20,7 +20,8 @@ body {
 body {
   min-height: 100vh;
   min-height: 100svh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--text);
   background: #13151b;
   font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -146,6 +147,55 @@ a {
   padding: 24px;
 }
 
+.access-state {
+  position: fixed;
+  z-index: 4;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px;
+  color: var(--text);
+  background: rgba(11, 12, 18, 0.82);
+  text-align: center;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.access-state p {
+  max-width: 42ch;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.access-spinner {
+  width: 30px;
+  height: 30px;
+  border: 2px solid rgba(255, 255, 255, 0.19);
+  border-top-color: #c4b8ff;
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+.blocked-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 1px solid rgba(255, 119, 128, 0.4);
+  border-radius: 50%;
+  color: #ff9aa0;
+  background: rgba(255, 79, 91, 0.12);
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.blocked-state h1 {
+  font-size: clamp(22px, 5vw, 30px);
+}
+
 .glass-card {
   border: 1px solid var(--glass-edge);
   background: var(--glass-fill);
@@ -264,6 +314,48 @@ h2 {
   background: #fff;
 }
 
+.apple-button {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  background: rgba(17, 18, 23, 0.74);
+}
+
+.apple-button:hover {
+  background: rgba(31, 32, 39, 0.92);
+}
+
+.guest-button {
+  min-height: 46px;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.075);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.guest-button:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.guest-button:focus-visible,
+.apple-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+.guest-note {
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .login-icon {
   width: 18px;
   height: 18px;
@@ -375,6 +467,33 @@ h2 {
   gap: 10px;
 }
 
+.privacy-settings {
+  margin-top: 14px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 13px;
+  background: rgba(8, 10, 18, 0.16);
+}
+
+.privacy-settings summary {
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.privacy-settings > p {
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.67);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.privacy-settings .consent-label {
+  margin-top: 8px;
+  font-size: 10px;
+}
+
 .social-link {
   display: flex;
   min-height: 68px;
@@ -390,6 +509,18 @@ h2 {
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   backdrop-filter: blur(20px) saturate(160%);
   transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.social-link.instagram {
+  background: linear-gradient(120deg, rgba(220, 39, 120, 0.19), rgba(255, 255, 255, 0.045));
+}
+
+.social-link.tiktok {
+  background: linear-gradient(120deg, rgba(0, 201, 196, 0.15), rgba(255, 255, 255, 0.045));
+}
+
+.social-link.spotify {
+  background: linear-gradient(120deg, rgba(30, 215, 96, 0.16), rgba(255, 255, 255, 0.045));
 }
 
 .social-link:hover {
@@ -443,8 +574,18 @@ h2 {
   color: rgba(255,255,255,0.82);
 }
 
+.social-card .social-footnote + .social-footnote {
+  margin-top: 9px;
+}
+
 .hidden {
   display: none !important;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes card-enter {

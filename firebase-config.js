@@ -1,6 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-app.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
+import { getFunctions } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-functions.js';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDnDvAilHhDU1NrctC5bclxn63t2L9RFuM',
@@ -15,4 +16,5 @@ const firebaseConfig = {
 export const firebaseApp = initializeApp(firebaseConfig);
 export const firebaseAuth = getAuth(firebaseApp);
 export const firebaseDatabase = getFirestore(firebaseApp);
+export const firebaseFunctions = getFunctions(firebaseApp, 'us-central1');
 export const adminEmail = 'mes223ut@gmail.com';

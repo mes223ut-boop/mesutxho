@@ -4,7 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#080b12" />
+    <meta name="robots" content="noindex, nofollow" />
     <title>Yönetim Paneli — mesutxho</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -20,7 +22,7 @@
     <main class="admin-page">
       <div class="admin-layout">
         <aside class="admin-sidebar" aria-label="Yönetim paneli menüsü">
-          <a class="sidebar-brand" href="#overview-section" aria-label="MESUTXHO yönetim paneli">
+          <a class="sidebar-brand" href="#overview-panel" aria-label="MESUTXHO yönetim paneli">
             <span class="admin-brand-mark" aria-hidden="true">M</span>
             <span>MESUTXHO<span class="sidebar-brand-caption">CONTROL PANEL</span></span>
           </a>
@@ -33,15 +35,23 @@
             </span>
           </div>
 
-          <p class="sidebar-section-label">MENÜ</p>
-          <nav class="sidebar-nav">
-            <a class="sidebar-link active" href="#overview-section" aria-current="page">
+          <p class="sidebar-section-label">YÖNETİM</p>
+          <nav class="sidebar-nav" aria-label="Panel bölümleri">
+            <a class="sidebar-link active" href="#overview-panel" data-panel="overview-panel" aria-current="page">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"></rect><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"></rect><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"></rect></svg>
               <span>Genel Bakış</span>
             </a>
-            <a class="sidebar-link" href="#records-section">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5h12M8 12h12M8 18.5h12"></path><path d="M3.5 5.5h.01M3.5 12h.01M3.5 18.5h.01"></path></svg>
-              <span>Oturum Kayıtları</span>
+            <a class="sidebar-link" href="#ip-panel" data-panel="ip-panel">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"></path><circle cx="12" cy="10" r="2.2"></circle></svg>
+              <span>IP ve Konum Logları</span>
+            </a>
+            <a class="sidebar-link" href="#device-panel" data-panel="device-panel">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8M12 16v4"></path></svg>
+              <span>Cihaz ve Tarayıcı</span>
+            </a>
+            <a class="sidebar-link" href="#users-panel" data-panel="users-panel">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c.5-3.4 2.5-5 6-5s5.5 1.6 6 5M16 5.5a3.5 3.5 0 0 1 0 6.9M17 15c2.4.5 3.7 2 4 5"></path></svg>
+              <span>Kullanıcı ve Oturumlar</span>
             </a>
           </nav>
 
@@ -50,114 +60,176 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"></path><path d="M20 4 11 13"></path><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"></path></svg>
               <span>Siteye Dön</span>
             </a>
+            <button id="admin-sign-out" class="sidebar-link sign-out-link hidden" type="button">Yönetici oturumunu kapat</button>
             <span class="sidebar-version">MESUTXHO · ADMIN</span>
           </div>
         </aside>
 
         <section class="admin-shell">
-        <header class="admin-header">
-          <div class="admin-brand">
-            <span class="admin-brand-mark" aria-hidden="true">M</span>
-            <span>MESUTXHO <span class="admin-brand-divider">/</span> ADMIN</span>
+          <header class="admin-header">
+            <div class="admin-brand">
+              <span class="admin-brand-mark" aria-hidden="true">M</span>
+              <span>MESUTXHO <span class="admin-brand-divider">/</span> ADMIN</span>
+            </div>
+            <span class="admin-secure-badge"><i class="status-indicator"></i> Güvenli yönetim</span>
+          </header>
+
+          <section class="admin-intro" aria-labelledby="admin-title">
+            <div>
+              <p class="eyebrow">CANLI ANALİTİK VE ERİŞİM YÖNETİMİ</p>
+              <h1 id="admin-title">Yönetim Paneli</h1>
+              <p class="admin-subtitle">Ziyaret, cihaz ve kullanıcı kayıtlarını güvenli biçimde yönet.</p>
+            </div>
+          </section>
+
+          <p id="admin-status" class="admin-status" role="status" aria-live="polite">Yetki kontrol ediliyor...</p>
+
+          <div id="admin-login-consent" class="privacy-notice admin-login-notice hidden">
+            <p>
+              Yönetici hesabıyla giriş yaptığında, açık onayınla IP, IP'den tahmin edilen şehir/ülke,
+              cihaz/tarayıcı ve giriş yöntemi 90 güne kadar kaydedilir. IP, şehir/ülke bulmak için
+              ipapi.co'ya iletilir. Giriş kayıtları yetkili yönetici ve Firebase proje yöneticileri
+              tarafından görülebilir. Firebase Console'da Google ve Apple sağlayıcılarını
+              yapılandırıp dağıtım ön koşullarını tamamlamalısın.
+            </p>
+            <label class="consent-label">
+              <input id="admin-privacy-consent" type="checkbox" />
+              <span>Bilgilendirmeyi okudum ve bu oturumun kaydedilmesine onay veriyorum.</span>
+            </label>
           </div>
-        </header>
 
-        <section id="overview-section" class="admin-intro" aria-labelledby="admin-title">
-          <div>
-            <p class="eyebrow"><span class="status-indicator"></span> GÜVENLİ OTURUM MERKEZİ</p>
-            <h1 id="admin-title">Genel Bakış</h1>
-            <p class="admin-subtitle">Giriş etkinliğini ve oturum detaylarını buradan takip et.</p>
-          </div>
-        </section>
+          <button id="admin-google-login" class="login-button google-button admin-login hidden" type="button" disabled>
+            Google hesabımla yönetici olarak giriş yap
+          </button>
 
-        <p id="admin-status" class="admin-status" role="status" aria-live="polite">Yetki kontrol ediliyor...</p>
-        <div id="admin-login-consent" class="privacy-notice hidden">
-          <p>
-            Google ile girişte adın, e-posta adresin, profil fotoğrafın ve UID'n;
-            giriş zamanı, tarayıcı bilgisi ve cihaz türüyle birlikte kaydedilir.
-            Tarayıcın destekliyorsa pil seviyesi ve ağ bağlantısı türü de kaydedilir.
-            Bu uygulama kaydında IP veya şehir/konum bilgisi toplanmaz. Kayıtları
-            yalnızca yetkili yönetici görebilir; Firebase proje yöneticileri
-            altyapıdan erişebilir. 90 gün sonra silinmek üzere ayarlanır.
-          </p>
-          <label class="consent-label">
-            <input id="admin-privacy-consent" type="checkbox" />
-            <span>Bilgilendirmeyi okudum ve kayıt işlemine onay veriyorum.</span>
-          </label>
-        </div>
-
-        <div id="admin-content" class="admin-content hidden">
-          <section class="metric-grid" aria-label="Oturum istatistikleri">
-            <article class="metric-card metric-total">
-              <div class="metric-topline">
-                <span class="metric-label">Toplam giriş</span>
-                <span class="metric-icon" aria-hidden="true">↗</span>
-              </div>
-              <strong id="metric-total" class="metric-value">—</strong>
-              <span class="metric-caption">Saklanan tüm oturum kayıtları</span>
-            </article>
-
-            <article class="metric-card metric-active">
-              <div class="metric-topline">
-                <span class="metric-label">Aktif kullanıcı</span>
-                <span class="metric-icon" aria-hidden="true"><span class="status-indicator"></span></span>
-              </div>
-              <strong id="metric-active" class="metric-value">—</strong>
-              <span class="metric-caption">Son 30 günde giriş yapan farklı hesap</span>
-            </article>
-
-            <article class="metric-card metric-devices">
-              <div class="metric-topline">
-                <span class="metric-label">Cihaz dağılımı</span>
+          <div id="admin-content" class="admin-content hidden">
+            <section id="overview-panel" class="dashboard-panel active" aria-labelledby="overview-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">ETKİNLİK ÖZETİ</p>
+                  <h2 id="overview-title">Genel Bakış</h2>
+                </div>
                 <span class="metric-period">SON 30 GÜN</span>
               </div>
-              <div class="device-breakdown">
-                <span><i class="device-dot mobile"></i>Mobil <strong id="device-mobile">0</strong></span>
-                <span><i class="device-dot desktop"></i>Masaüstü <strong id="device-desktop">0</strong></span>
-                <span><i class="device-dot tablet"></i>Tablet <strong id="device-tablet">0</strong></span>
+              <div class="metric-grid">
+                <article class="metric-card metric-total">
+                  <span class="metric-label">Toplam ziyaret</span>
+                  <strong id="metric-total" class="metric-value">—</strong>
+                  <span class="metric-caption">Saklama süresindeki kayıtlar</span>
+                </article>
+                <article class="metric-card metric-active">
+                  <span class="metric-label">Aktif kullanıcı</span>
+                  <strong id="metric-active" class="metric-value">—</strong>
+                  <span class="metric-caption">Son 30 gündeki farklı hesap/ziyaretçi</span>
+                </article>
+                <article class="metric-card metric-devices">
+                  <span class="metric-label">Cihaz türleri</span>
+                  <div class="device-breakdown">
+                    <span><i class="device-dot mobile"></i>Mobil <strong id="device-mobile">0</strong></span>
+                    <span><i class="device-dot desktop"></i>Masaüstü <strong id="device-desktop">0</strong></span>
+                    <span><i class="device-dot tablet"></i>Tablet <strong id="device-tablet">0</strong></span>
+                  </div>
+                </article>
               </div>
-              <span class="metric-caption">Oturum sayısına göre</span>
-            </article>
-          </section>
+              <article class="records-card">
+                <div class="records-heading">
+                  <div><h2>Giriş yöntemi dağılımı</h2><p class="retention-note">Kayıt yöntemlerine göre ziyaret sayısı</p></div>
+                </div>
+                <div id="provider-breakdown" class="provider-breakdown" aria-live="polite"></div>
+              </article>
+              <article class="records-card">
+                <div class="records-heading">
+                  <div><h2>Son ziyaretler</h2><p class="retention-note">En yeni 20 kayıt</p></div>
+                </div>
+                <div class="table-scroll">
+                  <table>
+                    <thead><tr><th>Kullanıcı</th><th>Yöntem</th><th>Giriş zamanı</th><th>Cihaz</th></tr></thead>
+                    <tbody id="recent-rows"></tbody>
+                  </table>
+                </div>
+              </article>
+            </section>
 
-          <section id="records-section" class="records-card" aria-labelledby="records-title">
-            <div class="records-heading">
-              <div>
-                <h2 id="records-title">Son oturumlar</h2>
-                <p class="retention-note">En yeni 100 kayıt · Saklama süresi 90 gün</p>
+            <section id="ip-panel" class="dashboard-panel" aria-labelledby="ip-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">AĞ VE KONUM KAYITLARI</p>
+                  <h2 id="ip-title">IP ve Konum Logları</h2>
+                </div>
               </div>
-              <label class="search-box">
-                <span class="search-icon" aria-hidden="true"></span>
-                <input id="session-search" type="search" placeholder="Kayıtlarda ara..." autocomplete="off" aria-label="Oturum kayıtlarında ara" />
-                <kbd>/</kbd>
-              </label>
-            </div>
+              <article class="records-card">
+                <div class="records-heading">
+                  <div><h2>Ziyaretçi IP kayıtları</h2><p class="retention-note">Şehir/ülke IP tabanlı yaklaşık konumdur.</p></div>
+                  <label class="search-box"><span class="search-icon" aria-hidden="true"></span><input id="ip-search" type="search" placeholder="IP veya konumda ara..." aria-label="IP ve konum loglarında ara" /></label>
+                </div>
+                <div class="table-scroll">
+                  <table>
+                    <thead><tr><th>IP adresi</th><th>Şehir / Ülke</th><th>Kullanıcı</th><th>Tarih / Saat</th><th>İşlem</th></tr></thead>
+                    <tbody id="ip-rows"></tbody>
+                  </table>
+                </div>
+              </article>
+              <article class="records-card">
+                <div class="records-heading"><div><h2>Engellenen IP adresleri</h2><p class="retention-note">Ban kaldırıldığında yeni girişlere tekrar izin verilir.</p></div></div>
+                <div class="table-scroll">
+                  <table>
+                    <thead><tr><th>IP adresi</th><th>Engelleme zamanı</th><th>İşlem</th></tr></thead>
+                    <tbody id="banned-ip-rows"></tbody>
+                  </table>
+                </div>
+              </article>
+            </section>
 
-            <div class="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Kullanıcı</th>
-                    <th>UID</th>
-                    <th>Giriş zamanı</th>
-                    <th>Cihaz</th>
-                    <th>Tarayıcı / User-Agent</th>
-                  </tr>
-                </thead>
-                <tbody id="session-rows"></tbody>
-              </table>
-            </div>
-            <p id="search-result-count" class="search-result-count"></p>
-          </section>
-        </div>
+            <section id="device-panel" class="dashboard-panel" aria-labelledby="device-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">TEKNOLOJİ DAĞILIMI</p>
+                  <h2 id="device-title">Cihaz ve Tarayıcı Logları</h2>
+                </div>
+              </div>
+              <div class="metric-grid device-metrics-grid">
+                <article class="metric-card"><span class="metric-label">Mobil</span><strong id="device-count-mobile" class="metric-value">0</strong><span id="device-percent-mobile" class="metric-caption">0%</span></article>
+                <article class="metric-card"><span class="metric-label">Masaüstü</span><strong id="device-count-desktop" class="metric-value">0</strong><span id="device-percent-desktop" class="metric-caption">0%</span></article>
+                <article class="metric-card"><span class="metric-label">Tablet</span><strong id="device-count-tablet" class="metric-value">0</strong><span id="device-percent-tablet" class="metric-caption">0%</span></article>
+              </div>
+              <article class="records-card">
+                <div class="records-heading"><div><h2>Tarayıcı ve işletim sistemi</h2></div></div>
+                <div class="table-scroll">
+                  <table><thead><tr><th>Tarayıcı</th><th>İşletim sistemi</th><th>Cihaz</th><th>Kullanım oranı</th><th>Son kullanım</th></tr></thead><tbody id="device-rows"></tbody></table>
+                </div>
+              </article>
+            </section>
 
-        <button id="admin-google-login" class="login-button google-button admin-login hidden" type="button" disabled>
-          Google hesabımla yönetici olarak giriş yap
-        </button>
+            <section id="users-panel" class="dashboard-panel" aria-labelledby="users-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">HESAP VE ERİŞİM DENETİMİ</p>
+                  <h2 id="users-title">Kullanıcı ve Oturum Kayıtları</h2>
+                </div>
+              </div>
+              <article class="records-card">
+                <div class="records-heading">
+                  <div><h2>Kullanıcılar ve ziyaret oturumları</h2><p class="retention-note">Kullanıcı banı tüm oturumlarda uygulanır.</p></div>
+                  <label class="search-box"><span class="search-icon" aria-hidden="true"></span><input id="user-search" type="search" placeholder="Ad, e-posta veya UID ara..." aria-label="Kullanıcı ve oturum kayıtlarında ara" /></label>
+                </div>
+                <div class="table-scroll">
+                  <table>
+                    <thead><tr><th>Kullanıcı</th><th>Yöntem</th><th>UID</th><th>Giriş zamanı</th><th>Durum / İşlem</th></tr></thead>
+                    <tbody id="user-rows"></tbody>
+                  </table>
+                </div>
+              </article>
+              <article class="records-card">
+                <div class="records-heading"><div><h2>Engellenen kullanıcılar</h2><p class="retention-note">Hesap engelini buradan kaldırabilirsin.</p></div></div>
+                <div class="table-scroll">
+                  <table><thead><tr><th>Kullanıcı</th><th>UID</th><th>Engelleme zamanı</th><th>İşlem</th></tr></thead><tbody id="banned-user-rows"></tbody></table>
+                </div>
+              </article>
+            </section>
+          </div>
         </section>
       </div>
     </main>
-
-    <script type="module" src="admin.js?v=20261013-3"></script>
+    <script type="module" src="admin.js?v=20261013-4"></script>
   </body>
 </html>

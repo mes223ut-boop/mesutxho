@@ -4,8 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#101018" />
-    <meta name="description" content="Mesutxho'nun sosyal profilleri. Google ile güvenli giriş." />
+    <meta name="description" content="Mesutxho'nun sosyal profilleri. Google, Apple veya misafir olarak devam et." />
     <title>mesutxho — Socials</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -17,20 +18,31 @@
     </video>
     <div class="background-shade" aria-hidden="true"></div>
 
-    <div class="audio-control" aria-label="Music controls">
-      <button id="audio-toggle" class="audio-toggle" type="button" aria-label="Play music" title="Play music">
-        <svg class="audio-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path class="audio-play-mark" d="M8 5.5v13l10-6.5-10-6.5Z" fill="currentColor" />
-          <path class="audio-pause-mark" d="M7 5h4v14H7zM15 5h4v14h-4z" fill="currentColor" />
-        </svg>
-      </button>
-      <label class="volume-control" for="volume-slider">
-        <span class="volume-label">Volume</span>
-        <input id="volume-slider" type="range" min="0" max="1" step="0.01" value="0.45" aria-label="Music volume" />
-      </label>
-    </div>
+    <section id="access-state" class="access-state" role="status" aria-live="polite">
+      <span class="access-spinner" aria-hidden="true"></span>
+      <p id="access-message">Erişim güvenli şekilde kontrol ediliyor...</p>
+      <button id="access-retry" class="guest-button hidden" type="button">Yeniden dene</button>
+    </section>
+    <section id="blocked-state" class="access-state hidden" role="alert" aria-live="assertive">
+      <span class="blocked-icon" aria-hidden="true">!</span>
+      <h1 id="blocked-title">Erişiminiz engellendi</h1>
+      <p id="blocked-message">Bu siteye erişiminiz yasaklanmıştır.</p>
+    </section>
 
-    <main class="page">
+    <main id="site-page" class="page hidden">
+      <div class="audio-control" aria-label="Music controls">
+        <button id="audio-toggle" class="audio-toggle" type="button" aria-label="Play music" title="Play music">
+          <svg class="audio-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path class="audio-play-mark" d="M8 5.5v13l10-6.5-10-6.5Z" fill="currentColor" />
+            <path class="audio-pause-mark" d="M7 5h4v14H7zM15 5h4v14h-4z" fill="currentColor" />
+          </svg>
+        </button>
+        <label class="volume-control" for="volume-slider">
+          <span class="volume-label">Volume</span>
+          <input id="volume-slider" type="range" min="0" max="1" step="0.01" value="0.45" aria-label="Music volume" />
+        </label>
+      </div>
+
       <section id="login-screen" class="glass-card login-card" aria-labelledby="login-title">
         <div class="identity">
           <div class="avatar" aria-hidden="true">M</div>
@@ -41,17 +53,18 @@
         </div>
 
         <h2 id="login-title">Welcome back</h2>
-        <p class="intro">Continue with your account</p>
+        <p class="intro">Hesabınla giriş yapabilir veya misafir olarak devam edebilirsin.</p>
 
         <div class="privacy-notice">
           <p>
-            Google ile girişte adın, e-posta adresin, profil fotoğrafın ve UID'n;
-            giriş zamanı, tarayıcı bilgisi ve cihaz türü Firebase'de kaydedilir.
-            Tarayıcın destekliyorsa pil seviyesi ve ağ bağlantısı türü de oturum
-            kaydına eklenir. IP adresi veya şehir/konum bilgisi bu uygulama kaydında
-            toplanmaz. Kayıtları yalnızca yetkili yönetici görebilir; Firebase
-            projesine erişimi olan proje yöneticileri altyapı üzerinden de
-            erişebilir. Kayıtlar 90 gün sonra silinmek üzere ayarlanır.
+            Onay verirsen giriş yöntemin, UID/e-posta/ad (sağlayıcı veriyorsa),
+            IP adresin, IP'den tahmin edilen şehir/ülken, cihaz türün, işletim
+            sistemin, tarayıcın ve giriş saatin Firebase'de 90 güne kadar saklanır.
+            Şehir/ülke bulmak için IP adresi ipapi.co servisine iletilir. Güvenlik
+            amacıyla erişim denetimi IP adresini her ziyarette işler; onay
+            vermezsen oturum kaydı oluşturulmaz. Kayıtları yetkili yönetici ve
+            Firebase proje yöneticileri görebilir. Onay vermeden misafir erişimi
+            mümkündür.
           </p>
           <label class="consent-label">
             <input id="privacy-consent" type="checkbox" />
@@ -67,9 +80,18 @@
               <path fill="#FBBC05" d="M6.41 13.91a6.02 6.02 0 0 1 0-3.82v-2.6H3.06a10 10 0 0 0 0 9.02l3.35-2.6Z" />
               <path fill="#EA4335" d="M12 5.96c1.47 0 2.79.51 3.83 1.52l2.87-2.87C16.96 2.98 14.7 2 12 2a10 10 0 0 0-8.94 5.49l3.35 2.6C7.2 7.72 9.4 5.96 12 5.96Z" />
             </svg>
-            <span>Continue with Google</span>
+            <span>Google ile devam et</span>
+          </button>
+          <button id="apple-login" class="login-button apple-button" type="button" disabled>
+            <svg class="login-icon apple-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor" d="M16.37 12.54c.02 2.25 1.97 3 1.99 3.01-.02.05-.31 1.07-1.02 2.12-.61.91-1.25 1.81-2.25 1.83-.98.02-1.3-.59-2.43-.59s-1.49.57-2.42.61c-.97.04-1.71-.98-2.33-1.88-1.27-1.84-2.24-5.2-.94-7.48.65-1.13 1.81-1.84 3.07-1.86.96-.02 1.86.65 2.43.65.57 0 1.64-.8 2.77-.68.47.02 1.8.19 2.65 1.43-.07.04-1.58.92-1.57 2.84ZM14.55 6.98c.51-.62.86-1.48.76-2.34-.74.03-1.64.49-2.17 1.1-.48.55-.9 1.42-.78 2.26.83.06 1.68-.42 2.19-1.02Z"/>
+            </svg>
+            <span>Apple ile devam et</span>
           </button>
         </div>
+        <button id="guest-button" class="guest-button" type="button">Misafir olarak devam et</button>
+        <button id="anonymous-button" class="guest-button anonymous-button" type="button" disabled>Onayla ve hesapsız devam et</button>
+        <p class="guest-note">Misafir erişiminde onay vermediğin sürece oturum kaydı tutulmaz.</p>
         <p class="login-note" id="login-note" aria-live="polite"></p>
       </section>
 
@@ -112,12 +134,27 @@
             <span class="external-arrow" aria-hidden="true">↗</span>
           </a>
         </nav>
+        <details class="privacy-settings">
+          <summary>Gizlilik ve kayıt onayı</summary>
+          <p>
+            Onay verirsen bu ziyaretin giriş yöntemi, UID/e-posta/ad (varsa), IP adresi,
+            ipapi.co üzerinden tahmin edilen şehir/ülke, cihaz türü, işletim sistemi,
+            tarayıcı/User-Agent ve giriş saati 90 güne kadar Firebase'de saklanır.
+            Güvenlik erişim denetimi IP'yi her ziyarette işler; onayı kaldırmak yeni
+            oturum kayıtlarını durdurur. Kayıtları yetkili yönetici ve Firebase proje
+            yöneticileri görebilir.
+          </p>
+          <label class="consent-label">
+            <input id="social-privacy-consent" type="checkbox" />
+            <span>Bu ziyaret için kayıt işlemine onay veriyorum.</span>
+          </label>
+        </details>
         <p id="social-status" class="social-footnote" role="status"></p>
         <p class="social-footnote">Tap an icon to open the profile</p>
       </section>
     </main>
 
     <audio id="background-audio" src="muzik.mp3" preload="auto" loop></audio>
-    <script type="module" src="script.js?v=20261013-3"></script>
+    <script type="module" src="script.js?v=20261013-4"></script>
   </body>
 </html>
