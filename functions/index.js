@@ -10,7 +10,7 @@ initializeApp();
 
 const database = getFirestore();
 const adminEmail = 'mes223ut@gmail.com';
-const privacyNoticeVersion = '2026-10-13-v4';
+const privacyNoticeVersion = '2026-10-14-v5';
 const sessionRetentionDays = 90;
 
 function getClientIp(request) {
@@ -56,7 +56,7 @@ async function getAccessStatus(ip, uid) {
   return { allowed: true, reason: null };
 }
 
-function getDeviceDetails(userAgent) {
+function getDeviceDetails(userAgent, clientHints = {}) {
   let deviceType = 'Desktop';
   if (/iPad|Tablet|PlayBook|Silk|Android(?!.*Mobi)/i.test(userAgent)) {
     deviceType = 'Tablet';
@@ -65,21 +65,58 @@ function getDeviceDetails(userAgent) {
   }
 
   let browser = 'Bilinmiyor';
-  if (/Edg\//i.test(userAgent)) browser = 'Edge';
-  else if (/OPR\//i.test(userAgent)) browser = 'Opera';
-  else if (/SamsungBrowser\//i.test(userAgent)) browser = 'Samsung Internet';
-  else if (/Firefox\//i.test(userAgent)) browser = 'Firefox';
-  else if (/Chrome\//i.test(userAgent)) browser = 'Chrome';
-  else if (/Safari\//i.test(userAgent)) browser = 'Safari';
+  let browserVersion = '';
+  const browserMatch = [
+    ['Edge', /Edg\/([\d.]+)/i],
+    ['Opera', /OPR\/([\d.]+)/i],
+    ['Samsung Internet', /SamsungBrowser\/([\d.]+)/i],
+    ['Firefox', /Firefox\/([\d.]+)/i],
+    ['Chrome', /Chrome\/([\d.]+)/i],
+    ['Safari', /Version\/([\d.]+).*Safari/i]
+  ].find(([, pattern]) => pattern.test(userAgent));
+  if (browserMatch) {
+    browser = browserMatch[0];
+    browserVersion = userAgent.match(browserMatch[1])?.[1] || '';
+  }
 
   let operatingSystem = 'Bilinmiyor';
-  if (/Windows/i.test(userAgent)) operatingSystem = 'Windows';
-  else if (/iPhone|iPad|iPod/i.test(userAgent)) operatingSystem = 'iOS';
-  else if (/Android/i.test(userAgent)) operatingSystem = 'Android';
-  else if (/Mac OS X|Macintosh/i.test(userAgent)) operatingSystem = 'macOS';
-  else if (/Linux/i.test(userAgent)) operatingSystem = 'Linux';
+  let operatingSystemVersion = '';
+  if (/Windows NT ([\d.]+)/i.test(userAgent)) {
+    operatingSystem = 'Windows';
+    const version = userAgent.match(/Windows NT ([\d.]+)/i)?.[1];
+    operatingSystemVersion = ({
+      '10.0': '10/11',
+      '6.3': '8.1',
+      '6.2': '8',
+      '6.1': '7'
+    })[version] || version || '';
+  } else if (/iPhone|iPad|iPod/i.test(userAgent)) {
+    operatingSystem = 'iOS';
+    operatingSystemVersion = userAgent.match(/OS ([\d_]+)/i)?.[1]?.replaceAll('_', '.') || '';
+  } else if (/Android/i.test(userAgent)) {
+    operatingSystem = 'Android';
+    operatingSystemVersion = userAgent.match(/Android ([\d.]+)/i)?.[1] || '';
+  } else if (/Mac OS X|Macintosh/i.test(userAgent)) {
+    operatingSystem = 'macOS';
+    operatingSystemVersion = userAgent.match(/Mac OS X ([\d_]+)/i)?.[1]?.replaceAll('_', '.') || '';
+  } else if (/Linux/i.test(userAgent)) {
+    operatingSystem = 'Linux';
+  }
 
-  return { deviceType, browser, operatingSystem };
+  return {
+    deviceType,
+    browser: typeof clientHints.browserName === 'string' ? clientHints.browserName.slice(0, 80) : browser,
+    browserVersion: typeof clientHints.browserVersion === 'string'
+      ? clientHints.browserVersion.slice(0, 40)
+      : browserVersion,
+    operatingSystem: typeof clientHints.platform === 'string'
+      ? clientHints.platform.slice(0, 80)
+      : operatingSystem,
+    operatingSystemVersion: typeof clientHints.platformVersion === 'string'
+      ? clientHints.platformVersion.slice(0, 40)
+      : operatingSystemVersion,
+    deviceModel: typeof clientHints.deviceModel === 'string' ? clientHints.deviceModel.slice(0, 120) : ''
+  };
 }
 
 function getAuthMethod(auth) {
@@ -104,9 +141,18 @@ async function getGeoLocation(ip) {
   if (data.error === true) {
     throw new Error(`GeoIP service rejected the lookup: ${String(data.reason || 'unknown error')}.`);
   }
+  const coordinates = (value) => (
+    typeof value === 'number' && Number.isFinite(value) ? value : null
+  );
   return {
     city: typeof data.city === 'string' ? data.city.slice(0, 120) : '',
-    country: typeof data.country_name === 'string' ? data.country_name.slice(0, 120) : ''
+    region: typeof data.region === 'string' ? data.region.slice(0, 120) : '',
+    postalCode: typeof data.postal === 'string' ? data.postal.slice(0, 32) : '',
+    country: typeof data.country_name === 'string' ? data.country_name.slice(0, 120) : '',
+    latitude: coordinates(data.latitude),
+    longitude: coordinates(data.longitude),
+    timezone: typeof data.timezone === 'string' ? data.timezone.slice(0, 80) : '',
+    isp: typeof data.org === 'string' ? data.org.slice(0, 200) : ''
   };
 }
 
@@ -129,14 +175,36 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
   }
 
   const userAgent = String(request.rawRequest.get('user-agent') || '').slice(0, 1000);
-  const { deviceType, browser, operatingSystem } = getDeviceDetails(userAgent);
+  const metadata = request.data?.metadata && typeof request.data.metadata === 'object'
+    ? request.data.metadata
+    : {};
+  const clientHints = metadata.clientHints && typeof metadata.clientHints === 'object'
+    ? metadata.clientHints
+    : {};
+  const {
+    deviceType,
+    browser,
+    browserVersion,
+    operatingSystem,
+    operatingSystemVersion,
+    deviceModel
+  } = getDeviceDetails(userAgent, clientHints);
   const auth = request.auth;
   const profile = auth?.token || {};
-  let geoLocation = { city: '', country: '' };
+  let geoLocation = {
+    city: '',
+    region: '',
+    postalCode: '',
+    country: '',
+    latitude: null,
+    longitude: null,
+    timezone: '',
+    isp: ''
+  };
   let geoStatus = 'available';
   try {
     geoLocation = await getGeoLocation(ip);
-    if (!geoLocation.city && !geoLocation.country) {
+    if (!geoLocation.city && !geoLocation.country && !geoLocation.isp) {
       geoStatus = 'unavailable';
       logger.warn('GeoIP provider returned no location for a visitor.');
     }
@@ -148,26 +216,88 @@ exports.recordVisit = onCall({ region: 'us-central1' }, async (request) => {
   const expiresAt = Timestamp.fromMillis(
     Date.now() + sessionRetentionDays * 24 * 60 * 60 * 1000
   );
+  const durationToken = crypto.randomBytes(32).toString('base64url');
   const record = {
     uid: auth?.uid || '',
     email: typeof profile.email === 'string' ? profile.email.slice(0, 320) : '',
     displayName: typeof profile.name === 'string' ? profile.name.slice(0, 200) : '',
+    photoURL: typeof metadata.photoURL === 'string' && metadata.photoURL.startsWith('https://')
+      ? metadata.photoURL.slice(0, 2000)
+      : '',
     authMethod: getAuthMethod(auth),
     ip,
     city: geoLocation.city,
+    region: geoLocation.region,
+    postalCode: geoLocation.postalCode,
     country: geoLocation.country,
+    latitude: geoLocation.latitude,
+    longitude: geoLocation.longitude,
+    timezone: geoLocation.timezone,
+    isp: geoLocation.isp,
     geoStatus,
     deviceType,
     browser,
+    browserVersion,
     operatingSystem,
+    operatingSystemVersion,
+    deviceModel,
+    screenResolution: typeof metadata.screenResolution === 'string'
+      ? metadata.screenResolution.slice(0, 40)
+      : '',
+    viewportResolution: typeof metadata.viewportResolution === 'string'
+      ? metadata.viewportResolution.slice(0, 40)
+      : '',
+    language: typeof metadata.language === 'string' ? metadata.language.slice(0, 40) : '',
+    clientTimezone: typeof metadata.timezone === 'string' ? metadata.timezone.slice(0, 80) : '',
+    referrer: typeof metadata.referrer === 'string' ? metadata.referrer.slice(0, 500) : '',
+    pagePath: typeof metadata.pagePath === 'string' ? metadata.pagePath.slice(0, 300) : '',
     userAgent,
     consentAccepted: true,
     privacyNoticeVersion,
+    durationSeconds: 0,
+    durationTokenHash: crypto.createHash('sha256').update(durationToken).digest('hex'),
     createdAt: FieldValue.serverTimestamp(),
     expiresAt
   };
   const session = await database.collection('sessions').add(record);
-  return { recorded: true, sessionId: session.id, geoStatus };
+  return { recorded: true, sessionId: session.id, durationToken, geoStatus };
+});
+
+exports.updateVisitDuration = onCall({ region: 'us-central1' }, async (request) => {
+  const sessionId = request.data?.sessionId;
+  const durationSeconds = request.data?.durationSeconds;
+  if (request.data?.consentAccepted !== true
+    || request.data?.privacyNoticeVersion !== privacyNoticeVersion
+    || typeof sessionId !== 'string'
+    || sessionId.length < 1
+    || sessionId.length > 128
+    || typeof request.data?.durationToken !== 'string'
+    || request.data.durationToken.length !== 43
+    || !Number.isInteger(durationSeconds)
+    || durationSeconds < 0
+    || durationSeconds > 7 * 24 * 60 * 60) {
+    throw new HttpsError('invalid-argument', 'Geçerli onaylı oturum ve süre gereklidir.');
+  }
+
+  const sessionRef = database.collection('sessions').doc(sessionId);
+  const session = await sessionRef.get();
+  if (!session.exists) {
+    throw new HttpsError('permission-denied', 'Bu oturum kaydını güncelleme yetkiniz yok.');
+  }
+  const expectedHash = session.get('durationTokenHash');
+  const suppliedHash = crypto.createHash('sha256').update(request.data.durationToken).digest('hex');
+  const ownsSession = Boolean(request.auth?.uid && session.get('uid') === request.auth.uid);
+  const hasValidToken = typeof expectedHash === 'string'
+    && /^[\da-f]{64}$/i.test(expectedHash)
+    && crypto.timingSafeEqual(Buffer.from(expectedHash, 'hex'), Buffer.from(suppliedHash, 'hex'));
+  if (!ownsSession && !hasValidToken) {
+    throw new HttpsError('permission-denied', 'Bu oturum kaydını güncelleme yetkiniz yok.');
+  }
+  await sessionRef.update({
+    durationSeconds,
+    lastActivityAt: FieldValue.serverTimestamp()
+  });
+  return { updated: true };
 });
 
 exports.setUserBan = onCall({ region: 'us-central1' }, async (request) => {

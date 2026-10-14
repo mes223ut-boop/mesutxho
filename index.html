@@ -57,14 +57,16 @@
 
         <div class="privacy-notice">
           <p>
-            Onay verirsen giriş yöntemin, UID/e-posta/ad (sağlayıcı veriyorsa),
-            IP adresin, IP'den tahmin edilen şehir/ülken, cihaz türün, işletim
-            sistemin, tarayıcın ve giriş saatin Firebase'de 90 güne kadar saklanır.
-            Şehir/ülke bulmak için IP adresi ipapi.co servisine iletilir. Güvenlik
-            amacıyla erişim denetimi IP adresini her ziyarette işler; onay
-            vermezsen oturum kaydı oluşturulmaz. Kayıtları yetkili yönetici ve
-            Firebase proje yöneticileri görebilir. Onay vermeden misafir erişimi
-            mümkündür.
+            Onay verirsen IP adresin ve IP'den yaklaşık konum (ülke, şehir, bölge,
+            posta kodu, koordinat, zaman dilimi ve internet sağlayıcısı), cihaz türü/modeli,
+            işletim sistemi ve sürümü, tarayıcı ve sürümü, ekran boyutu, dil, yönlendiren
+            sayfanın adresi (sorgu parametreleri olmadan), giriş yöntemi, oturum süresi
+            ve giriş yaptıysan UID/e-posta/ad/profil fotoğrafı Firebase'de 90 güne kadar
+            saklanır. IP konumu ipapi.co üzerinden sorgulanır; bu yaklaşık konumdur.
+            GeoIP servisi yanıt vermezse site çalışmaya devam eder ve konum alanları boş
+            kalır. Güvenlik amacıyla erişim denetimi IP adresini her ziyarette işler;
+            kayıt onayı vermeden misafir erişimi mümkündür ve oturum kaydı oluşturulmaz.
+            Kayıtları yetkili yönetici ve Firebase proje yöneticileri görebilir.
           </p>
           <label class="consent-label">
             <input id="privacy-consent" type="checkbox" />
@@ -137,9 +139,11 @@
         <details class="privacy-settings">
           <summary>Gizlilik ve kayıt onayı</summary>
           <p>
-            Onay verirsen bu ziyaretin giriş yöntemi, UID/e-posta/ad (varsa), IP adresi,
-            ipapi.co üzerinden tahmin edilen şehir/ülke, cihaz türü, işletim sistemi,
-            tarayıcı/User-Agent ve giriş saati 90 güne kadar Firebase'de saklanır.
+            Onay verirsen bu ziyaretin IP/konum/ISP bilgisi, cihaz modeli ve türü,
+            işletim sistemi/sürümü, tarayıcı/sürümü, ekran boyutu, dil, yönlendiren
+            sayfa, oturum süresi, giriş yöntemi ve varsa UID/e-posta/ad/profil fotoğrafı
+            90 güne kadar Firebase'de saklanır. IP konumu yaklaşık olarak ipapi.co'dan
+            alınır. Servis yanıt vermezse site çalışmaya devam eder ve konum boş kalır.
             Güvenlik erişim denetimi IP'yi her ziyarette işler; onayı kaldırmak yeni
             oturum kayıtlarını durdurur. Kayıtları yetkili yönetici ve Firebase proje
             yöneticileri görebilir.
@@ -155,6 +159,6 @@
     </main>
 
     <audio id="background-audio" src="muzik.mp3" preload="auto" loop></audio>
-    <script type="module" src="script.js?v=20261013-4"></script>
+    <script type="module" src="script.js?v=20261014-5"></script>
   </body>
 </html>

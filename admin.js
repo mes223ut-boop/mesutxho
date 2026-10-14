@@ -3,8 +3,8 @@ import {
   firebaseAuth,
   firebaseDatabase,
   firebaseFunctions
-} from './firebase-config.js?v=20261013-4';
-import { recordUserSession } from './session-records.js?v=20261013-4';
+} from './firebase-config.js?v=20261014-5';
+import { recordUserSession } from './session-records.js?v=20261014-5';
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -112,10 +112,41 @@ function getAuthMethod(record) {
   return record.authMethod || (record.uid ? 'Google' : 'Anonymous');
 }
 
+function formatDuration(value) {
+  if (!Number.isFinite(value) || value < 0) return '—';
+  const minutes = Math.floor(value / 60);
+  const seconds = value % 60;
+  return minutes ? `${minutes} dk ${seconds} sn` : `${seconds} sn`;
+}
+
 function addCell(row, value, className = '') {
   const cell = document.createElement('td');
   if (className) cell.className = className;
   cell.textContent = value === null || value === undefined || value === '' ? '—' : String(value);
+  row.appendChild(cell);
+  return cell;
+}
+
+function addLinkCell(row, value, label = value) {
+  const cell = document.createElement('td');
+  if (typeof value !== 'string' || !value) {
+    cell.textContent = '—';
+    row.appendChild(cell);
+    return cell;
+  }
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') throw new Error('HTTPS link required.');
+    const link = document.createElement('a');
+    link.href = url.href;
+    link.textContent = label;
+    link.title = value;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    cell.appendChild(link);
+  } catch (error) {
+    cell.textContent = value;
+  }
   row.appendChild(cell);
   return cell;
 }
@@ -139,7 +170,7 @@ function createActionButton(label, callback, className = 'action-button') {
 function renderRecentSessions() {
   const recent = sessions.slice(0, 20);
   if (!recent.length) {
-    showEmpty(recordRows.recent, 'Henüz ziyaret kaydı bulunmuyor.', 4);
+    showEmpty(recordRows.recent, 'Henüz ziyaret kaydı bulunmuyor.', 6);
     return;
   }
 
@@ -147,9 +178,11 @@ function renderRecentSessions() {
   for (const record of recent) {
     const row = document.createElement('tr');
     addCell(row, formatUser(record));
+    addCell(row, [record.ip, record.city, record.country].filter(Boolean).join(' · '));
     addCell(row, getAuthMethod(record));
     addCell(row, formatTimestamp(record.createdAt));
-    addCell(row, record.deviceType || 'Bilinmiyor');
+    addCell(row, `${record.deviceType || 'Bilinmiyor'} · ${record.browser || 'Bilinmiyor'} ${record.browserVersion || ''}`.trim());
+    addCell(row, formatDuration(record.durationSeconds));
     fragment.appendChild(row);
   }
   recordRows.recent.replaceChildren(fragment);
@@ -215,12 +248,16 @@ function renderIpRows() {
   const filtered = sessions.filter((record) => [
     record.ip,
     record.city,
+    record.region,
     record.country,
+    record.postalCode,
+    record.timezone,
+    record.isp,
     record.uid,
     record.email
   ].some((value) => typeof value === 'string' && value.toLocaleLowerCase('tr-TR').includes(term)));
   if (!filtered.length) {
-    showEmpty(recordRows.ip, term ? 'Aramanla eşleşen IP kaydı bulunamadı.' : 'Henüz IP kaydı bulunmuyor.', 5);
+    showEmpty(recordRows.ip, term ? 'Aramanla eşleşen IP kaydı bulunamadı.' : 'Henüz IP kaydı bulunmuyor.', 9);
     return;
   }
 
@@ -228,7 +265,17 @@ function renderIpRows() {
   for (const record of filtered) {
     const row = document.createElement('tr');
     addCell(row, record.ip);
-    addCell(row, [record.city, record.country].filter(Boolean).join(', ') || 'Konum alınamadı');
+    addCell(
+      row,
+      [record.city, record.region, record.country].filter(Boolean).join(', ')
+        || (record.geoStatus === 'unavailable' ? 'GeoIP alınamadı' : 'Konum bilgisi yok')
+    );
+    addCell(row, record.postalCode);
+    addCell(row, Number.isFinite(record.latitude) && Number.isFinite(record.longitude)
+      ? `${record.latitude}, ${record.longitude}`
+      : '');
+    addCell(row, record.timezone || record.clientTimezone);
+    addCell(row, record.isp);
     addCell(row, formatUser(record));
     addCell(row, formatTimestamp(record.createdAt));
     const actionCell = document.createElement('td');
@@ -297,7 +344,7 @@ function renderDeviceRows() {
       : 'Ziyaretlerin %0\'ı';
   }
   if (!groups.size) {
-    showEmpty(recordRows.devices, 'Henüz cihaz kaydı bulunmuyor.', 5);
+    showEmpty(recordRows.devices, 'Henüz cihaz kaydı bulunmuyor.', 7);
     return;
   }
   const fragment = document.createDocumentFragment();
@@ -305,9 +352,11 @@ function renderDeviceRows() {
   for (const group of sorted) {
     const record = group.latest;
     const row = document.createElement('tr');
-    addCell(row, record.browser || 'Bilinmiyor');
-    addCell(row, record.operatingSystem || 'Bilinmiyor');
-    addCell(row, record.deviceType || 'Bilinmiyor');
+    addCell(row, `${record.browser || 'Bilinmiyor'} ${record.browserVersion || ''}`.trim());
+    addCell(row, `${record.operatingSystem || 'Bilinmiyor'} ${record.operatingSystemVersion || ''}`.trim());
+    addCell(row, `${record.deviceType || 'Bilinmiyor'}${record.deviceModel ? ` · ${record.deviceModel}` : ''}`);
+    addCell(row, [record.screenResolution, record.viewportResolution].filter(Boolean).join(' / '));
+    addCell(row, [record.language, record.clientTimezone || record.timezone].filter(Boolean).join(' · '));
     const percent = Math.round((group.count / sessions.length) * 100);
     addCell(row, `${group.count.toLocaleString('tr-TR')} (%${percent})`);
     addCell(row, formatTimestamp(record.createdAt));
@@ -326,7 +375,7 @@ function renderUserRows() {
     record.ip
   ].some((value) => typeof value === 'string' && value.toLocaleLowerCase('tr-TR').includes(term)));
   if (!filtered.length) {
-    showEmpty(recordRows.users, term ? 'Aramanla eşleşen kayıt bulunamadı.' : 'Henüz kullanıcı/oturum kaydı bulunmuyor.', 5);
+    showEmpty(recordRows.users, term ? 'Aramanla eşleşen kayıt bulunamadı.' : 'Henüz kullanıcı/oturum kaydı bulunmuyor.', 9);
     return;
   }
 
@@ -334,8 +383,12 @@ function renderUserRows() {
   for (const record of filtered) {
     const row = document.createElement('tr');
     addCell(row, `${formatUser(record)}${record.email && record.displayName ? ` · ${record.email}` : ''}`);
+    addLinkCell(row, record.photoURL, record.photoURL ? 'Profil fotoğrafı' : '');
     addCell(row, getAuthMethod(record));
     addCell(row, record.uid);
+    addCell(row, record.ip);
+    addCell(row, [record.referrer, record.pagePath].filter(Boolean).join(' → '));
+    addCell(row, formatDuration(record.durationSeconds));
     addCell(row, formatTimestamp(record.createdAt));
     const actions = document.createElement('td');
     const actionGroup = document.createElement('div');
@@ -599,7 +652,7 @@ async function recordAdminVisit() {
   if (!consentCheckbox.checked || adminVisitLogged) return;
   adminVisitLogged = true;
   try {
-    await recordUserSession();
+    await recordUserSession(currentUser);
   } catch (error) {
     adminVisitLogged = false;
     console.error('Yönetici oturumu kaydedilemedi:', error);

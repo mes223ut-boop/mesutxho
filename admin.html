@@ -86,11 +86,11 @@
 
           <div id="admin-login-consent" class="privacy-notice admin-login-notice hidden">
             <p>
-              Yönetici hesabıyla giriş yaptığında, açık onayınla IP, IP'den tahmin edilen şehir/ülke,
-              cihaz/tarayıcı ve giriş yöntemi 90 güne kadar kaydedilir. IP, şehir/ülke bulmak için
-              ipapi.co'ya iletilir. Giriş kayıtları yetkili yönetici ve Firebase proje yöneticileri
-              tarafından görülebilir. Firebase Console'da Google ve Apple sağlayıcılarını
-              yapılandırıp dağıtım ön koşullarını tamamlamalısın.
+              Yönetici oturumun açık onayınla IP/konum/ISP, cihaz ve tarayıcı ayrıntıları,
+              ekran/dil/referrer, giriş yöntemi, oturum süresi ve profil bilgilerini 90 güne
+              kadar kaydeder. IP'den yaklaşık konum için ipapi.co kullanılır; servis yanıt
+              vermezse kayıt konum olmadan oluşturulur. Kayıtlar yetkili yönetici ve Firebase
+              proje yöneticileri tarafından görülebilir.
             </p>
             <label class="consent-label">
               <input id="admin-privacy-consent" type="checkbox" />
@@ -143,7 +143,7 @@
                 </div>
                 <div class="table-scroll">
                   <table>
-                    <thead><tr><th>Kullanıcı</th><th>Yöntem</th><th>Giriş zamanı</th><th>Cihaz</th></tr></thead>
+                    <thead><tr><th>Kullanıcı</th><th>IP / Konum</th><th>Yöntem</th><th>Giriş zamanı</th><th>Cihaz / Tarayıcı</th><th>Süre</th></tr></thead>
                     <tbody id="recent-rows"></tbody>
                   </table>
                 </div>
@@ -164,7 +164,7 @@
                 </div>
                 <div class="table-scroll">
                   <table>
-                    <thead><tr><th>IP adresi</th><th>Şehir / Ülke</th><th>Kullanıcı</th><th>Tarih / Saat</th><th>İşlem</th></tr></thead>
+                    <thead><tr><th>IP adresi</th><th>Konum</th><th>Posta kodu</th><th>Koordinat</th><th>Zaman dilimi</th><th>ISP</th><th>Kullanıcı</th><th>Tarih / Saat</th><th>Ban işlemi</th></tr></thead>
                     <tbody id="ip-rows"></tbody>
                   </table>
                 </div>
@@ -195,7 +195,7 @@
               <article class="records-card">
                 <div class="records-heading"><div><h2>Tarayıcı ve işletim sistemi</h2></div></div>
                 <div class="table-scroll">
-                  <table><thead><tr><th>Tarayıcı</th><th>İşletim sistemi</th><th>Cihaz</th><th>Kullanım oranı</th><th>Son kullanım</th></tr></thead><tbody id="device-rows"></tbody></table>
+                  <table><thead><tr><th>Tarayıcı / Sürüm</th><th>İşletim sistemi / Sürüm</th><th>Cihaz / Model</th><th>Ekran / Görünüm</th><th>Dil / Saat dilimi</th><th>Kullanım</th><th>Son kullanım</th></tr></thead><tbody id="device-rows"></tbody></table>
                 </div>
               </article>
             </section>
@@ -214,7 +214,7 @@
                 </div>
                 <div class="table-scroll">
                   <table>
-                    <thead><tr><th>Kullanıcı</th><th>Yöntem</th><th>UID</th><th>Giriş zamanı</th><th>Durum / İşlem</th></tr></thead>
+                    <thead><tr><th>Kullanıcı / E-posta</th><th>Profil</th><th>Yöntem</th><th>UID</th><th>IP</th><th>Referrer / Sayfa</th><th>Süre</th><th>Giriş zamanı</th><th>Ban işlemi</th></tr></thead>
                     <tbody id="user-rows"></tbody>
                   </table>
                 </div>
@@ -230,6 +230,6 @@
         </section>
       </div>
     </main>
-    <script type="module" src="admin.js?v=20261013-4"></script>
+    <script type="module" src="admin.js?v=20261014-5"></script>
   </body>
 </html>

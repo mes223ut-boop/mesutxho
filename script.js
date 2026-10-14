@@ -3,8 +3,11 @@ import {
   firebaseAuth,
   firebaseDatabase,
   firebaseFunctions
-} from './firebase-config.js?v=20261013-4';
-import { recordUserSession } from './session-records.js?v=20261013-4';
+} from './firebase-config.js?v=20261014-5';
+import {
+  recordUserSession,
+  updateSessionDuration
+} from './session-records.js?v=20261014-5';
 import {
   GoogleAuthProvider,
   OAuthProvider,
@@ -46,7 +49,7 @@ const volumeSlider = document.getElementById('volume-slider');
 const checkAccessCallable = httpsCallable(firebaseFunctions, 'checkAccess', { timeout: 12000 });
 const googleProvider = new GoogleAuthProvider();
 const appleProvider = new OAuthProvider('apple.com');
-const consentStorageKey = 'mesutxho-privacy-consent-v4';
+const consentStorageKey = 'mesutxho-privacy-consent-v5';
 
 let currentUser = null;
 let authReady = false;
@@ -57,6 +60,8 @@ let accessCheckPromise = null;
 let profileUnsubscribe = null;
 let loggedVisitKeys = new Set();
 let accessTimer = null;
+let durationTimer = null;
+let activeSession = null;
 let authTimeoutId;
 
 try {
@@ -188,8 +193,20 @@ async function recordCurrentVisit() {
     return;
   }
   loggedVisitKeys.add(visitKey);
+  const visitStartedAt = Date.now();
   try {
-    const result = await recordUserSession();
+    const result = await recordUserSession(currentUser);
+    activeSession = {
+      id: result.sessionId,
+      token: result.durationToken,
+      startedAt: visitStartedAt
+    };
+    if (durationTimer !== null) {
+      window.clearInterval(durationTimer);
+    }
+    durationTimer = window.setInterval(() => {
+      void persistSessionDuration();
+    }, 15000);
     if (result.geoStatus === 'unavailable') {
       socialStatus.textContent = 'Oturum kaydedildi; şehir/ülke bilgisi GeoIP servisinden alınamadı.';
     } else {
@@ -204,6 +221,21 @@ async function recordCurrentVisit() {
     } else {
       loginNote.textContent = message;
     }
+  }
+}
+
+async function persistSessionDuration() {
+  if (!activeSession || !consentCheckbox.checked) return;
+  const durationSeconds = Math.floor((Date.now() - activeSession.startedAt) / 1000);
+  try {
+    await updateSessionDuration(activeSession.id, activeSession.token, durationSeconds);
+  } catch (error) {
+    console.error('Oturum süresi Firebase’de güncellenemedi:', error);
+    if (durationTimer !== null) {
+      window.clearInterval(durationTimer);
+      durationTimer = null;
+    }
+    socialStatus.textContent = 'Oturum kaydı alındı; geçirilen süre güncellenemedi.';
   }
 }
 
@@ -318,6 +350,11 @@ function handleConsentChange(accepted) {
     } else {
       sessionStorage.removeItem(consentStorageKey);
       loggedVisitKeys = new Set();
+      activeSession = null;
+      if (durationTimer !== null) {
+        window.clearInterval(durationTimer);
+        durationTimer = null;
+      }
       socialStatus.textContent = 'Bu ziyaret için yeni oturum kaydı tutulmayacak.';
     }
   } catch (error) {
@@ -474,6 +511,11 @@ onAuthStateChanged(firebaseAuth, (user) => {
   window.clearTimeout(authTimeoutId);
   if (currentUser?.uid !== user?.uid) {
     loggedVisitKeys = new Set();
+    activeSession = null;
+    if (durationTimer !== null) {
+      window.clearInterval(durationTimer);
+      durationTimer = null;
+    }
   }
   currentUser = user;
   authReady = true;
@@ -493,6 +535,7 @@ accessTimer = window.setInterval(() => {
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
+    void persistSessionDuration();
     return;
   }
   startBackgroundVideo();
@@ -513,8 +556,12 @@ window.addEventListener('load', () => {
   }
 }, { once: true });
 window.addEventListener('beforeunload', () => {
+  void persistSessionDuration();
   if (accessTimer !== null) {
     window.clearInterval(accessTimer);
+  }
+  if (durationTimer !== null) {
+    window.clearInterval(durationTimer);
   }
   stopProfileListener();
 });
